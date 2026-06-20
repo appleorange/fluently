@@ -40,7 +40,7 @@ Goal: deterministic scoring engine working offline before connecting to live aud
 
 ---
 
-## Phase 3 — Real-Time UI
+## Phase 3 — Real-Time UI ✓
 Goal: live reading session with word-by-word color coding
 
 - [x] `src/components/PassageDisplay.tsx`
@@ -49,13 +49,13 @@ Goal: live reading session with word-by-word color coding
   - [x] Green = correct, Red = error, Yellow = hesitation, gray = pending
   - [x] Smooth, readable layout — flowing text with subtle background highlights
   - [x] Verified rendering in browser with mock data (2026-06-20)
-- [ ] Connect Deepgram stream → alignment → PassageDisplay in real time **[post-merge]**
+- [x] Connect Deepgram stream → alignment → PassageDisplay in real time
 - [x] Session timer (counts up during reading, stops at 60 seconds or manual stop)
   - [x] Counts up in page.tsx state with setInterval ref
   - [x] Auto-stops at 60s, warns at 50s (amber color + countdown)
   - [x] Start Reading / Stop buttons with idle/recording/processing/results states
   - [x] Verified in browser (2026-06-20)
-- [ ] **Verification:** read passage live, see words color-coded correctly in real time **[post-merge]**
+- [x] **Verification:** read passage live, words color-coded in real time, hesitations highlighted yellow, punctuation displayed correctly
 
 ---
 
