@@ -7,9 +7,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage } from '@/lib/types'
-
-// TODO: import components as they are built
-// import AudioRecorder from '@/components/AudioRecorder'
+import AudioRecorder from '@/components/AudioRecorder'
 import PassageDisplay, { MOCK_PASSAGE, MOCK_WORD_STATUSES } from '@/components/PassageDisplay'
 import DiagnosticReport, { MOCK_REPORT, MOCK_ERROR_TYPE } from '@/components/DiagnosticReport'
 import MetricsDashboard, { MOCK_METRICS } from '@/components/MetricsDashboard'
@@ -170,7 +168,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Session timer control */}
+        {/* Session timer display */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
           {sessionState === 'idle' && (
             <div className="flex items-center justify-between">
@@ -194,9 +192,7 @@ export default function Home() {
                   {formatTime(timerSeconds)}
                 </span>
                 {isNearEnd && (
-                  <span className="text-sm font-medium text-amber-500">
-                    {remaining}s left
-                  </span>
+                  <span className="text-sm font-medium text-amber-500">{remaining}s left</span>
                 )}
               </div>
               <button
@@ -233,6 +229,32 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* AudioRecorder — handles mic access and Deepgram streaming */}
+        <div className="mb-6">
+          <AudioRecorder
+            onWord={handleWord}
+            onStop={handleSessionEnd}
+            sessionState={sessionState}
+            setSessionState={setSessionState}
+          />
+        </div>
+
+        {/* Phase 1 verification: raw word stream — remove once pipeline is verified */}
+        {wordStream.length > 0 && (
+          <div className="bg-slate-900 rounded-xl p-4 mb-6">
+            <p className="text-slate-400 text-xs font-mono mb-3">
+              DEEPGRAM OUTPUT — {wordStream.length} words
+            </p>
+            <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+              {wordStream.map((w, i) => (
+                <div key={i} className="font-mono text-xs text-green-400">
+                  {String(i + 1).padStart(2, '0')}. &quot;{w.word}&quot; — start: {w.start.toFixed(3)}s  duration: {w.duration.toFixed(3)}s  conf: {(w.confidence * 100).toFixed(0)}%
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Passage display — always visible so reader can follow along */}
         {/* TODO: replace mock with live passage + wordStatuses from pipeline */}
