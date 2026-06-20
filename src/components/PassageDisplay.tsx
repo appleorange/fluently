@@ -17,6 +17,8 @@ function getWordClass(status: WordStatus): string {
       return 'bg-red-100 text-red-800'
     case 'hesitation':
       return 'bg-yellow-100 text-yellow-800'
+    case 'uncertain':
+      return 'bg-slate-100 text-slate-400 italic'
     case 'pending':
     default:
       return 'text-slate-500'
@@ -53,7 +55,8 @@ export default function PassageDisplay({ passage, wordStatuses }: PassageDisplay
         <LegendItem color="bg-green-100" label="Correct" />
         <LegendItem color="bg-red-100" label="Error" />
         <LegendItem color="bg-yellow-100" label="Hesitation" />
-        <LegendItem color="bg-slate-100" label="Not yet read" />
+        <LegendItem color="bg-slate-100" label="Uncertain transcription" />
+        <LegendItem color="bg-slate-50" label="Not yet read" />
       </div>
     </div>
   )

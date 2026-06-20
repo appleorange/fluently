@@ -1,13 +1,17 @@
 'use client'
 
-import { DiagnosticResponse } from '@/lib/types'
+import { ErrorType, Recommendation } from '@/lib/types'
 
 export interface DiagnosticReportProps {
   report: string
-  errorType: DiagnosticResponse['errorType']
+  errorType: ErrorType
+  recommendation: Recommendation
+  reasoning: string
+  onAdvance: () => void
+  onRetry: () => void
 }
 
-const ERROR_TYPE_CONFIG: Record<DiagnosticResponse['errorType'], { label: string; badge: string }> = {
+const ERROR_TYPE_CONFIG: Record<ErrorType, { label: string; badge: string }> = {
   fluent:   { label: 'Fluent Reader',              badge: 'bg-green-100 text-green-700'  },
   phrasing: { label: 'Phrasing Difficulty',        badge: 'bg-yellow-100 text-yellow-700' },
   mixed:    { label: 'Mixed Fluency Challenges',   badge: 'bg-orange-100 text-orange-700' },
@@ -26,9 +30,10 @@ function ReportParagraph({ text, index }: { text: string; index: number }) {
   )
 }
 
-export default function DiagnosticReport({ report, errorType }: DiagnosticReportProps) {
+export default function DiagnosticReport({ report, errorType, recommendation, reasoning, onAdvance, onRetry }: DiagnosticReportProps) {
   const config = ERROR_TYPE_CONFIG[errorType]
   const paragraphs = report.split(/\n\n+/).filter(p => p.trim().length > 0)
+  const isAdvance = recommendation === 'advance'
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
@@ -47,12 +52,48 @@ export default function DiagnosticReport({ report, errorType }: DiagnosticReport
           <ReportParagraph key={i} text={para} index={i} />
         ))}
       </div>
+
+      <div className="mt-6 pt-5 border-t border-slate-100">
+        <p className="text-xs text-slate-400 mb-3">{reasoning}</p>
+
+        {isAdvance ? (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={onAdvance}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors"
+            >
+              Next passage →
+            </button>
+            <button
+              onClick={onRetry}
+              className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              or redo this passage
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={onRetry}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors"
+            >
+              Try again
+            </button>
+            <button
+              onClick={onAdvance}
+              className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              or advance to next passage anyway →
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 // Mock data for visual testing — remove once real API is wired
-export const MOCK_ERROR_TYPE: DiagnosticResponse['errorType'] = 'decoding'
+export const MOCK_ERROR_TYPE: ErrorType = 'decoding'
 
 export const MOCK_REPORT = `Maya is reading at approximately 87 words correct per minute, which is below the expected target of 115 WCPM for a Grade 4 student.
 

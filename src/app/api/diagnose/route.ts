@@ -1,15 +1,13 @@
-// Fluently — Diagnostic API Route
-// POST /api/diagnose
-// Receives structured Metrics object + passage metadata
-// Returns plain-language diagnostic report from Claude
-// NEVER receives raw audio or raw transcript
-
 import Anthropic from '@anthropic-ai/sdk'
-import { Metrics } from '@/lib/types'
+import { Metrics, Recommendation } from '@/lib/types'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-})
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const BENCHMARKS: Record<number, { wcpmLow: number; wcpmHigh: number }> = {
+  2: { wcpmLow: 90,  wcpmHigh: 110 },
+  4: { wcpmLow: 125, wcpmHigh: 145 },
+  6: { wcpmLow: 150, wcpmHigh: 170 },
+}
 
 interface DiagnoseRequest {
   metrics: Metrics
@@ -17,54 +15,82 @@ interface DiagnoseRequest {
   passageTitle: string
 }
 
-function buildPrompt(metrics: Metrics, grade: number): string {
+function buildPrompt(
+  metrics: Metrics,
+  grade: number,
+  wcpmStatus: string,
+  accuracyStatus: string
+): string {
   const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections } = metrics
+  const bench = BENCHMARKS[grade] ?? { wcpmLow: grade * 30 + 50, wcpmHigh: grade * 30 + 70 }
 
-  return `You are a reading specialist analyzing a child's oral reading fluency assessment. Based on the structured data below, write a plain-language diagnostic report for a parent or teacher. The report should:
-1. State the key finding in the first sentence (what the data shows most clearly)
-2. Distinguish whether this is primarily a DECODING issue (getting words wrong) or a PHRASING FLUENCY issue (correct words but poor phrasing/pausing)
-3. Give 1-2 specific, actionable exercises targeting the identified issue
-4. Be warm and encouraging in tone — not clinical or alarming
-5. Be under 150 words
-6. Refer to the reader as "the student" — never use character names from the passage
+  return `You are a reading specialist analyzing a child's oral reading fluency assessment.
+
+Return ONLY a JSON object — no markdown, no explanation, nothing else — in exactly this shape:
+{"report":"...","recommendation":"advance"|"retry"|"repeat","reasoning":"..."}
+
+Rules for the report field:
+- Plain-language diagnostic for a parent or teacher, under 150 words
+- First sentence states the key finding
+- Distinguish DECODING issues (wrong words) from PHRASING FLUENCY issues (poor pausing)
+- Give 1-2 specific actionable exercises
+- Warm and encouraging tone, not clinical
+- Refer to the reader as "the student" — never use character names from the passage
+
+Rules for recommendation:
+- "advance": wcpmStatus is "at benchmark" AND accuracyStatus is "passing" → student is ready for harder material
+- "repeat": wcpmStatus is "at benchmark" BUT accuracyStatus is "below threshold" → speed is fine but accuracy needs work, try a different passage at same level
+- "retry": wcpmStatus is "below benchmark" → not ready to move on, practice this passage again
+
+Rules for reasoning:
+- One sentence explaining the recommendation, referencing the specific numbers
 
 ASSESSMENT DATA:
-- Grade level passage: Grade ${grade}
-- Words correct per minute (WCPM): ${wcpm} (grade ${grade} benchmark: ${grade * 30 + 50} WCPM)
-- Accuracy: ${accuracy}%
-- Substitution errors: ${errorCounts.substitutions} (reader said a different word)
-- Omission errors: ${errorCounts.omissions} (reader skipped a word)
-- Insertion errors: ${errorCounts.insertions} (reader added a word not in passage)
-- Hesitations: ${errorCounts.hesitations} (pauses longer than 500ms mid-reading)
-- Self-corrections: ${selfCorrections} (caught and fixed their own errors — positive sign)
-- Pause placement: ${pausePlacement.boundaryPercent}% of pauses at natural phrase boundaries (higher is better; below 50% suggests phrasing fluency issues)
+- Grade ${grade} passage (WCPM benchmark: ${bench.wcpmLow}–${bench.wcpmHigh}, accuracy threshold: 95%)
+- WCPM: ${wcpm} → wcpmStatus: "${wcpmStatus}"
+- Accuracy: ${accuracy}% → accuracyStatus: "${accuracyStatus}"
+- Substitutions: ${errorCounts.substitutions}, Omissions: ${errorCounts.omissions}, Insertions: ${errorCounts.insertions}
+- Hesitations: ${errorCounts.hesitations} (pauses >500ms)
+- Self-corrections: ${selfCorrections}
+- Pause placement: ${pausePlacement.boundaryPercent}% at natural phrase boundaries (below 50% = phrasing issue)`
+}
 
-Based on this data, write the diagnostic report:`
+function parseRecommendation(raw: string): Recommendation {
+  if (raw === 'advance' || raw === 'retry' || raw === 'repeat') return raw
+  return 'retry'
 }
 
 export async function POST(request: Request) {
   try {
     const body: DiagnoseRequest = await request.json()
-    const { metrics, passageGrade, passageTitle } = body
+    const { metrics, passageGrade } = body
 
     if (!metrics) {
       return Response.json({ error: 'Missing metrics' }, { status: 400 })
     }
 
+    const bench = BENCHMARKS[passageGrade] ?? { wcpmLow: passageGrade * 30 + 50, wcpmHigh: passageGrade * 30 + 70 }
+    const wcpmStatus = metrics.wcpm >= bench.wcpmLow ? 'at benchmark' : 'below benchmark'
+    const accuracyStatus = metrics.accuracy >= 95 ? 'passing' : 'below threshold'
+
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 500,
+      max_tokens: 600,
       messages: [
-        {
-          role: 'user',
-          content: buildPrompt(metrics, passageGrade)
-        }
+        { role: 'user', content: buildPrompt(metrics, passageGrade, wcpmStatus, accuracyStatus) }
       ]
     })
 
-    const report = message.content[0].type === 'text' ? message.content[0].text : ''
+    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    // Strip markdown code fences if Claude wraps the JSON
+    const jsonStr = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
+    const parsed = JSON.parse(jsonStr)
 
-    return Response.json({ report, passageTitle })
+    return Response.json({
+      report: parsed.report ?? '',
+      recommendation: parseRecommendation(parsed.recommendation),
+      reasoning: parsed.reasoning ?? ''
+    })
   } catch (error) {
     console.error('Diagnose API error:', error)
     return Response.json({ error: 'Failed to generate report' }, { status: 500 })
