@@ -16,6 +16,17 @@
 - Wired AudioRecorder into `page.tsx` with raw word stream debug panel
 - Verified live: 25 words with correct timestamps, durations, and pause gaps captured
 
+## 2026-06-20 — Phase 3 UI complete (DiagnosticReport + MetricsDashboard + session timer)
+- Built `src/components/DiagnosticReport.tsx`: error-type badge, paragraph rendering with bold support
+- Built `src/components/MetricsDashboard.tsx`: WCPM/accuracy stat cards, error bars, pause placement
+- Built session timer in `page.tsx`: 60s countdown, auto-stop, amber warning at 50s
+- All components verified in browser with mock data
+
+## 2026-06-20 — PassageDisplay.tsx
+- Built `src/components/PassageDisplay.tsx` — renders passage word-by-word as colored spans
+- Props: `passage: Passage`, `wordStatuses: Map<number, WordStatus>`
+- Color scheme: green=correct, red=any error type, yellow=hesitation, gray=pending
+
 ## 2026-06-20 — Project Initialized
 - Created project structure and all foundation docs
 - Defined full product spec, architecture, roadmap
