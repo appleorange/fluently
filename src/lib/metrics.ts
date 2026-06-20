@@ -1,60 +1,47 @@
-// Fluently — Metrics Computation
-// Pure function — takes alignment output + timestamps, returns structured Metrics object
-// No API calls, no side effects
-
 import { AlignedWord, ErrorCounts, Metrics, PausePlacement, WordTimestamp } from './types'
 
-const HESITATION_THRESHOLD_MS = 500 // 500ms pause = hesitation marker
+const HESITATION_THRESHOLD_MS = 500
 
-/**
- * Detect hesitations from timestamp gaps between consecutive words
- */
 function detectHesitations(timestamps: WordTimestamp[]): number[] {
-  const hesitationIndices: number[] = []
+  const indices: number[] = []
   for (let i = 1; i < timestamps.length; i++) {
-    const prev = timestamps[i - 1]
-    const curr = timestamps[i]
-    const gapMs = (curr.start - (prev.start + prev.duration)) * 1000
-    if (gapMs > HESITATION_THRESHOLD_MS) {
-      hesitationIndices.push(i)
-    }
+    const gap = (timestamps[i].start - (timestamps[i - 1].start + timestamps[i - 1].duration)) * 1000
+    if (gap > HESITATION_THRESHOLD_MS) indices.push(i)
   }
-  return hesitationIndices
+  return indices
 }
 
-/**
- * Analyze pause placement relative to syntactic boundaries in the passage.
- * Uses compromise.js to identify phrase boundaries in the TARGET text.
- * Pauses at boundaries = good phrasing. Pauses mid-phrase = phrasing fluency issue.
- * 
- * NOTE: Claude Code should use context7 to get up-to-date compromise.js docs
- * before implementing this function. Import compromise client-side only.
- */
 async function analyzePausePlacement(
   timestamps: WordTimestamp[],
   passageText: string
 ): Promise<PausePlacement> {
-  // Dynamic import for browser-only usage
   const nlp = (await import('compromise')).default
   const doc = nlp(passageText)
 
-  // Get phrase boundary positions from compromise
-  // Phrases end at: sentence boundaries, clause boundaries, prepositional phrases
-  const phrases = doc.json() as Array<{ terms: Array<{ text: string }> }>
   const boundaryWords = new Set<string>()
-  phrases.forEach(phrase => {
-    if (phrase.terms.length > 0) {
-      const lastWord = phrase.terms[phrase.terms.length - 1].text.toLowerCase()
-      boundaryWords.add(lastWord)
+
+  // Sentence-level boundaries from compromise
+  const sentences = doc.sentences().json() as Array<{ terms: Array<{ text: string }> }>
+  sentences.forEach(s => {
+    if (s.terms?.length > 0) {
+      const last = s.terms[s.terms.length - 1].text.toLowerCase().replace(/[^a-z0-9']/g, '')
+      if (last) boundaryWords.add(last)
     }
   })
 
-  const pauseTimestamps = detectHesitations(timestamps)
+  // Clause-level boundaries: words immediately before commas, semicolons, colons
+  const clausePattern = /([\w']+)[,;:]/g
+  let match
+  while ((match = clausePattern.exec(passageText)) !== null) {
+    boundaryWords.add(match[1].toLowerCase())
+  }
+
+  const pauseIndices = detectHesitations(timestamps)
   let atBoundary = 0
   let midPhrase = 0
 
-  pauseTimestamps.forEach(idx => {
-    const prevWord = timestamps[idx - 1]?.word?.toLowerCase() ?? ''
+  pauseIndices.forEach(idx => {
+    const prevWord = timestamps[idx - 1]?.word?.toLowerCase().replace(/[^a-z0-9']/g, '') ?? ''
     if (boundaryWords.has(prevWord)) {
       atBoundary++
     } else {
@@ -62,7 +49,7 @@ async function analyzePausePlacement(
     }
   })
 
-  const totalPauses = pauseTimestamps.length
+  const totalPauses = pauseIndices.length
   return {
     totalPauses,
     atBoundary,
@@ -71,9 +58,6 @@ async function analyzePausePlacement(
   }
 }
 
-/**
- * Detect self-corrections: an error immediately followed by the correct word
- */
 function detectSelfCorrections(aligned: AlignedWord[]): number {
   let count = 0
   for (let i = 0; i < aligned.length - 1; i++) {
@@ -88,9 +72,6 @@ function detectSelfCorrections(aligned: AlignedWord[]): number {
   return count
 }
 
-/**
- * Main metrics computation
- */
 export async function computeMetrics(
   aligned: AlignedWord[],
   timestamps: WordTimestamp[],
@@ -99,14 +80,11 @@ export async function computeMetrics(
   const correctWords = aligned.filter(w => w.status === 'correct').length
   const totalExpected = aligned.filter(w => w.status !== 'insertion').length
 
-  // Duration from first to last word timestamp
   const durationSeconds = timestamps.length >= 2
     ? (timestamps[timestamps.length - 1].start + timestamps[timestamps.length - 1].duration) - timestamps[0].start
     : 0
 
-  const wcpm = durationSeconds > 0
-    ? Math.round((correctWords / durationSeconds) * 60)
-    : 0
+  const wcpm = durationSeconds > 0 ? Math.round((correctWords / durationSeconds) * 60) : 0
 
   const errorCounts: ErrorCounts = {
     substitutions: aligned.filter(w => w.status === 'substitution').length,
@@ -117,9 +95,7 @@ export async function computeMetrics(
 
   const pausePlacement = await analyzePausePlacement(timestamps, passageText)
   const selfCorrections = detectSelfCorrections(aligned)
-  const accuracy = totalExpected > 0
-    ? Math.round((correctWords / totalExpected) * 100)
-    : 0
+  const accuracy = totalExpected > 0 ? Math.round((correctWords / totalExpected) * 100) : 0
 
   return {
     wcpm,

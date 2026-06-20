@@ -7,36 +7,36 @@
 
 ---
 
-## Phase 1 — Foundation & Deepgram Streaming
+## Phase 1 — Foundation & Deepgram Streaming ✓
 Goal: prove audio → word timestamps pipeline works before building anything on top of it
 
-- [ ] Next.js project initialized with TypeScript and Tailwind
-- [ ] `.env.local` configured with Deepgram + Anthropic keys
-- [ ] `src/lib/deepgram.ts` — browser-side Deepgram streaming client
-  - [ ] Microphone permission request
-  - [ ] WebSocket connection to Deepgram streaming API
-  - [ ] Returns only `is_final: true` word objects with `start`, `duration`, `word` fields
-  - [ ] Console.log verified: word timestamps printing correctly
-- [ ] `src/components/AudioRecorder.tsx` — start/stop recording button, passes word stream to parent
-- [ ] Basic page renders AudioRecorder, prints raw Deepgram output to screen
-- [ ] **Verification:** speak 10 words, see 10 word objects with timestamps on screen
+- [x] Next.js project initialized with TypeScript and Tailwind
+- [x] `.env.local` configured with Deepgram + Anthropic keys
+- [x] `src/lib/deepgram.ts` — browser-side Deepgram streaming client
+  - [x] Microphone permission request
+  - [x] WebSocket connection to Deepgram streaming API
+  - [x] Returns only `is_final: true` word objects with `start`, `duration`, `word` fields
+  - [x] Console.log verified: word timestamps printing correctly
+- [x] `src/components/AudioRecorder.tsx` — start/stop recording button, passes word stream to parent
+- [x] Basic page renders AudioRecorder, prints raw Deepgram output to screen
+- [x] **Verification:** spoke 25 words, timestamps + durations + confidence all correct. Pause gaps correctly captured (hesitation detection data confirmed).
 
 ---
 
-## Phase 2 — Levenshtein Alignment Pipeline
+## Phase 2 — Levenshtein Alignment Pipeline ✓
 Goal: deterministic scoring engine working offline before connecting to live audio
 
-- [ ] `public/passages/` — 3 hardcoded passages at grade levels 2, 4, 6 (from Project Gutenberg)
-- [ ] `src/lib/alignment.ts` — Levenshtein alignment function
-  - [ ] Normalize both strings (lowercase, strip punctuation) before comparing
-  - [ ] Return array of word objects: `{expected, got, status: correct|substitution|omission|insertion}`
-  - [ ] Tested offline with fake input before connecting to Deepgram
-- [ ] `src/lib/metrics.ts` — computes scoring from alignment output + timestamps
-  - [ ] WCPM (words correct per minute)
-  - [ ] Error count by type (substitution / omission / insertion)
-  - [ ] Hesitation detection (pause > 500ms between consecutive words)
-  - [ ] Pause placement analysis (pauses at syntactic boundaries vs mid-phrase via compromise.js)
-- [ ] **Verification:** paste fake aligned output, see correct metrics computed
+- [x] `public/passages/` — 3 hardcoded passages at grade levels 2, 4, 6 (from Project Gutenberg)
+- [x] `src/lib/alignment.ts` — Levenshtein alignment function
+  - [x] Normalize both strings (lowercase, strip punctuation) before comparing
+  - [x] Return array of word objects: `{expected, got, status: correct|substitution|omission|insertion}`
+  - [x] Tested offline with fake input before connecting to Deepgram
+- [x] `src/lib/metrics.ts` — computes scoring from alignment output + timestamps
+  - [x] WCPM (words correct per minute)
+  - [x] Error count by type (substitution / omission / insertion)
+  - [x] Hesitation detection (pause > 500ms between consecutive words)
+  - [x] Pause placement analysis (pauses at syntactic boundaries vs mid-phrase via compromise.js)
+- [x] **Verification:** offline test with fake aligned output — all statuses, WCPM, hesitation, and pause placement correct
 
 ---
 
@@ -129,11 +129,24 @@ Goal: reliable, beautiful demo for judges
 - [ ] Identify best demo passage (something with interesting errors likely — medium complexity, formal register)
 - [ ] **Verification:** full end-to-end demo works 3 times in a row without breaking
 
+### Redis session caching
+- [ ] Sign up for Upstash at upstash.com, get REST URL and token
+- [ ] Install `@upstash/redis`
+- [ ] Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to `.env.local` and `.env.example`
+- [ ] `src/lib/redis.ts` — initialize Upstash Redis client, verify connection with a test read/write
+- [ ] Update `src/app/api/diagnose/route.ts` — check Redis for previous attempt on same passage before calling Claude, include previous metrics in Claude prompt if found, store current attempt with 24hr TTL after Claude responds
+- [ ] Update `DiagnosticReport.tsx` — if previous attempt exists in response, show comparison row above report ("Last attempt: 87 WCPM → This attempt: 94 WCPM" with green arrow if improved, red if regressed)
+- [ ] Update `page.tsx` — generate `sessionId` with `crypto.randomUUID()` on first load, pass to diagnose API call
+- [ ] **Verification:** do two reads of the same passage, confirm second report references the first attempt's metrics
+
 ---
 
 ## Session Log
 | Session | Date | What was completed |
 |---------|------|--------------------|
+| 1 | 2026-06-20 | Project initialized, docs created |
+| 2 | 2026-06-20 | Phase 1 complete — Deepgram streaming verified with live timestamps |
+
 | 1 | — | Project initialized |
 | 2 | 2026-06-20 | PassageDisplay.tsx — Phase 3 UI layer, word-by-word color coding component |
 | 3 | 2026-06-20 | DiagnosticReport.tsx + MetricsDashboard.tsx — Phase 3 UI complete |
