@@ -1,0 +1,8 @@
+{
+  "grade": 6,
+  "title": "The Observatory",
+  "source": "Public Domain",
+  "text": "The old observatory sat on a hill outside of town, its white dome visible for miles in every direction. For decades it had been used by astronomers to map the movement of planets and record the positions of distant stars. Now it stood mostly empty, its equipment outdated and its funding cut. A group of students had petitioned the city council to restore it as a public science center. They argued that access to real scientific instruments could change how young people understood their place in the universe.",
+  "words": ["The", "old", "observatory", "sat", "on", "a", "hill", "outside", "of", "town", "its", "white", "dome", "visible", "for", "miles", "in", "every", "direction", "For", "decades", "it", "had", "been", "used", "by", "astronomers", "to", "map", "the", "movement", "of", "planets", "and", "record", "the", "positions", "of", "distant", "stars", "Now", "it", "stood", "mostly", "empty", "its", "equipment", "outdated", "and", "its", "funding", "cut", "A", "group", "of", "students", "had", "petitioned", "the", "city", "council", "to", "restore", "it", "as", "a", "public", "science", "center", "They", "argued", "that", "access", "to", "real", "scientific", "instruments", "could", "change", "how", "young", "people", "understood", "their", "place", "in", "the", "universe"],
+  "targetWCPM": 140
+}

@@ -1,0 +1,8 @@
+{
+  "grade": 2,
+  "title": "The Little Dog",
+  "source": "Public Domain",
+  "text": "The little dog ran down the path. He saw a big cat by the tree. The cat sat still and looked at him. The dog stopped and wagged his tail. The cat got up and walked away. The dog watched it go. Then he ran back home to his yard.",
+  "words": ["The", "little", "dog", "ran", "down", "the", "path", "He", "saw", "a", "big", "cat", "by", "the", "tree", "The", "cat", "sat", "still", "and", "looked", "at", "him", "The", "dog", "stopped", "and", "wagged", "his", "tail", "The", "cat", "got", "up", "and", "walked", "away", "The", "dog", "watched", "it", "go", "Then", "he", "ran", "back", "home", "to", "his", "yard"],
+  "targetWCPM": 60
+}
