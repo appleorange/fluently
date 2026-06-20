@@ -26,6 +26,7 @@ function buildPrompt(metrics: Metrics, grade: number): string {
 3. Give 1-2 specific, actionable exercises targeting the identified issue
 4. Be warm and encouraging in tone — not clinical or alarming
 5. Be under 150 words
+6. Refer to the reader as "the student" — never use character names from the passage
 
 ASSESSMENT DATA:
 - Grade level passage: Grade ${grade}
