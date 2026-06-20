@@ -14,6 +14,7 @@ node_modules/
 
 # Debug
 npm-debug.log*
+tsconfig.tsbuildinfo
 
 # Claude Code local settings
 .claude/
