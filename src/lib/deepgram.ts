@@ -1,25 +1,9 @@
-// Fluently — Deepgram Streaming Client
-// Handles microphone access + WebSocket streaming to Deepgram
-// Emits only is_final: true word objects with timestamps
-// 
-// NOTE: Claude Code should use context7 to verify current Deepgram SDK
-// streaming API before implementing. SDK has changed across versions.
-// Query: "deepgram streaming browser javascript websocket"
-
 import { WordTimestamp } from './types'
 
 export interface DeepgramSession {
   stop: () => void
 }
 
-/**
- * Start a Deepgram streaming session.
- * 
- * @param apiKey - Deepgram API key (should come from server-side token endpoint)
- * @param onWord - callback fired for each final word with timestamp
- * @param onError - callback fired on connection or mic errors
- * @returns session object with stop() method
- */
 export async function startDeepgramSession(
   apiKey: string,
   onWord: (word: WordTimestamp) => void,
@@ -34,12 +18,6 @@ export async function startDeepgramSession(
     return { stop: () => {} }
   }
 
-  // Connect to Deepgram streaming endpoint
-  // Key params:
-  // - model: nova-2 (best accuracy)
-  // - punctuate: false (punctuation breaks alignment)
-  // - interim_results: false (final results only)
-  // - language: en-US
   const params = new URLSearchParams({
     model: 'nova-2',
     punctuate: 'false',
@@ -66,20 +44,19 @@ export async function startDeepgramSession(
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
-      // Only process final results
       if (!data.is_final) return
-      
+
       const words = data.channel?.alternatives?.[0]?.words ?? []
-      words.forEach((w: { word: string; start: number; duration: number; confidence: number }) => {
+      words.forEach((w: { word: string; start: number; end: number; confidence: number }) => {
         onWord({
           word: w.word,
           start: w.start,
-          duration: w.duration,
+          duration: w.end - w.start,
           confidence: w.confidence
         })
       })
     } catch {
-      // Ignore parse errors on non-JSON messages
+      // ignore non-JSON control messages from Deepgram
     }
   }
 
@@ -87,10 +64,17 @@ export async function startDeepgramSession(
     onError(new Error('Deepgram WebSocket connection failed'))
   }
 
+  ws.onclose = (event) => {
+    if (!event.wasClean) {
+      onError(new Error(`Deepgram connection closed unexpectedly (code ${event.code})`))
+    }
+  }
+
   const stop = () => {
     mediaRecorder.stop()
     stream.getTracks().forEach(track => track.stop())
     if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'CloseStream' }))
       ws.close()
     }
   }
