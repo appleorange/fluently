@@ -59,25 +59,23 @@ Goal: live reading session with word-by-word color coding
 
 ---
 
-## Phase 4 — Claude Diagnostic Report
+## Phase 4 — Claude Diagnostic Report ✓
 Goal: structured metrics → plain-language clinical report
 
-- [ ] `src/app/api/diagnose/route.ts` — POST endpoint **[friend owns this]**
-  - [ ] Receives structured metrics JSON (never raw audio or transcript)
-  - [ ] Constructs diagnostic prompt with full error log
-  - [ ] Returns Claude's plain-language report
-- [ ] Prompt engineering: Claude must distinguish decoding vs phrasing fluency issues from structured data **[friend owns this]**
-- [x] `src/components/DiagnosticReport.tsx` — renders report cleanly for parent/teacher
-  - [x] Error-type badge (fluent/phrasing/mixed/decoding, color-coded)
-  - [x] Paragraph rendering with **bold** support for Claude markdown
-  - [x] Verified in browser with mock data (2026-06-20)
+- [x] `src/app/api/diagnose/route.ts` — POST endpoint
+  - [x] Receives structured metrics JSON (never raw audio or transcript)
+  - [x] Returns structured JSON: `{report, recommendation, reasoning}`
+  - [x] Computes wcpmStatus/accuracyStatus from grade benchmarks (G2: 90-110, G4: 125-145, G6: 150-170)
+  - [x] Claude makes advance/retry/repeat recommendation based on status flags
+- [x] Prompt engineering: distinguishes decoding vs phrasing fluency, references student not character names
+- [x] `src/components/DiagnosticReport.tsx` — advance/retry action buttons with reasoning
+  - [x] Green "Next passage →" button when recommendation is "advance"
+  - [x] Amber "Try again" button when recommendation is "retry" or "repeat"
+  - [x] Muted secondary option always available (user can override recommendation)
+  - [x] Reasoning shown in small gray text above buttons
 - [x] `src/components/MetricsDashboard.tsx` — visual breakdown of WCPM, error types, pause placement
-  - [x] WCPM prominently displayed with color severity (green/yellow/red vs target)
-  - [x] Accuracy + duration stat cards
-  - [x] Error breakdown as CSS horizontal bars (substitutions/omissions/insertions/hesitations)
-  - [x] Pause placement progress bar with boundary percentage
-  - [x] Verified in browser with mock data (2026-06-20)
-- [ ] **Verification:** submit fake metrics, get clinically meaningful report back **[after merge]**
+- [x] Confidence score filtering: low-confidence Deepgram words flagged as "uncertain" instead of definite errors
+- [x] **Verified:** API returns valid JSON with correct recommendation logic
 
 ---
 
