@@ -7,7 +7,7 @@ export interface WordTimestamp {
   confidence: number // 0-1 from Deepgram
 }
 
-export type WordStatus = 'correct' | 'substitution' | 'omission' | 'insertion' | 'hesitation' | 'pending'
+export type WordStatus = 'correct' | 'substitution' | 'omission' | 'insertion' | 'hesitation' | 'uncertain' | 'pending'
 
 export interface AlignedWord {
   expected: string
@@ -51,9 +51,14 @@ export interface Passage {
   targetWCPM: number
 }
 
+export type ErrorType = 'decoding' | 'phrasing' | 'mixed' | 'fluent'
+export type Recommendation = 'advance' | 'retry' | 'repeat'
+
 export interface DiagnosticResponse {
   report: string
-  errorType: 'decoding' | 'phrasing' | 'mixed' | 'fluent'
+  errorType: ErrorType
+  recommendation: Recommendation
+  reasoning: string
 }
 
 export type SessionState = 'idle' | 'recording' | 'processing' | 'results'

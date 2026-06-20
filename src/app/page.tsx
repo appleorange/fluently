@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse } from '@/lib/types'
+import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse, Recommendation } from '@/lib/types'
 import AudioRecorder from '@/components/AudioRecorder'
 import PassageDisplay from '@/components/PassageDisplay'
 import DiagnosticReport from '@/components/DiagnosticReport'
@@ -36,6 +36,8 @@ export default function Home() {
   const [aligned, setAligned] = useState<AlignedWord[]>([])
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [report, setReport] = useState<string>('')
+  const [recommendation, setRecommendation] = useState<Recommendation>('retry')
+  const [reasoning, setReasoning] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [timerSeconds, setTimerSeconds] = useState(0)
 
@@ -105,6 +107,18 @@ export default function Home() {
       }
     }
 
+    // Overlay uncertain: low-confidence Deepgram words marked as errors get flagged
+    // as uncertain rather than definite errors — may be transcription noise, not reader error
+    const CONFIDENCE_THRESHOLD = 0.8
+    aligned.forEach(w => {
+      const status = map.get(w.index)
+      if (status === 'substitution' || status === 'insertion') {
+        if (w.timestamp && w.timestamp.confidence < CONFIDENCE_THRESHOLD) {
+          map.set(w.index, 'uncertain')
+        }
+      }
+    })
+
     return map
   }, [aligned, wordStream])
 
@@ -135,6 +149,8 @@ export default function Home() {
       })
       const data = await res.json()
       setReport(data.report)
+      setRecommendation(data.recommendation ?? 'retry')
+      setReasoning(data.reasoning ?? '')
       setSessionState('results')
     } catch {
       setError('Something went wrong. Please try again.')
@@ -165,8 +181,42 @@ export default function Home() {
     setAligned([])
     setMetrics(null)
     setReport('')
+    setRecommendation('retry')
+    setReasoning('')
     setError('')
   }, [stopTimer])
+
+  const handleRetry = useCallback(() => {
+    // Reset session, keep same passage
+    stopTimer()
+    setTimerSeconds(0)
+    setSessionState('idle')
+    setWordStream([])
+    setAligned([])
+    setMetrics(null)
+    setReport('')
+    setRecommendation('retry')
+    setReasoning('')
+    setError('')
+  }, [stopTimer])
+
+  const handleAdvance = useCallback(() => {
+    // Move to next grade level
+    const grades = [2, 4, 6]
+    const nextGrade = grades[grades.indexOf(selectedGrade) + 1] ?? 6
+    setSelectedGrade(nextGrade)
+    loadPassage(nextGrade)
+    stopTimer()
+    setTimerSeconds(0)
+    setSessionState('idle')
+    setWordStream([])
+    setAligned([])
+    setMetrics(null)
+    setReport('')
+    setRecommendation('retry')
+    setReasoning('')
+    setError('')
+  }, [selectedGrade, loadPassage, stopTimer])
 
   const isNearEnd = timerSeconds >= 50
   const remaining = SESSION_DURATION - timerSeconds
@@ -287,7 +337,14 @@ export default function Home() {
           <MetricsDashboard metrics={metrics} targetWCPM={passage?.targetWCPM} />
         )}
         {sessionState === 'results' && report && metrics && (
-          <DiagnosticReport report={report} errorType={getErrorType(metrics)} />
+          <DiagnosticReport
+            report={report}
+            errorType={getErrorType(metrics)}
+            recommendation={recommendation}
+            reasoning={reasoning}
+            onAdvance={handleAdvance}
+            onRetry={handleRetry}
+          />
         )}
       </div>
     </main>
