@@ -126,6 +126,24 @@ Goal: reliable, beautiful demo for judges
 - [ ] Update `page.tsx` — generate `sessionId` with `crypto.randomUUID()` on first load, pass to diagnose API call
 - [ ] **Verification:** do two reads of the same passage, confirm second report references the first attempt's metrics
 
+### Deepgram depth
+- [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
+- [ ] Enable disfluency detection in Deepgram params — detect verbal hesitations ("um", "uh", repetitions) as a second hesitation signal alongside timestamp gap detection. Pass disfluency count separately in the metrics object so Claude can distinguish verbal vs silent hesitations
+
+### Longitudinal error tracking (diagnostic arc)
+- [ ] Extend Redis schema to store per-session error log: `{type, word, syntacticContext, passageId, timestamp}` per error instance, keyed by a persistent `readerId` (simple UUID stored in localStorage)
+- [ ] After 3+ sessions, change the Claude diagnostic prompt from snapshot mode to longitudinal mode — pass the aggregated error history and ask Claude to identify which error types are persisting, worsening, or resolving across sessions
+- [ ] Structured longitudinal input to Claude:
+  ```
+  Session 1: 6 function word omissions, 2 at clause boundary
+  Session 2: 4 function word omissions, 3 at clause boundary
+  Session 3: 8 function word omissions, 5 at clause boundary
+  Pattern: increasing rate, concentrated at clause boundaries → prosodic chunking issue
+  ```
+- [ ] Update `DiagnosticReport.tsx` — after 3+ sessions show a "Reading history" section above the current report with a simple timeline of WCPM and accuracy across sessions
+- [ ] Update `project_spec.md` to document the `readerId` localStorage key and Redis schema for longitudinal data
+- [ ] **Verification:** simulate 3 sessions manually, confirm Claude report shifts from snapshot language to pattern language
+
 ---
 
 ## Session Log
