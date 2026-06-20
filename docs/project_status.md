@@ -6,7 +6,7 @@
 ---
 
 ## Milestone Checklist
-- [ ] Phase 1: Deepgram streaming with word timestamps verified
+- [x] Phase 1: Deepgram streaming with word timestamps verified
 - [ ] Phase 2: Levenshtein alignment pipeline working offline
 - [ ] Phase 3: Real-time word-by-word color coding UI
 - [ ] Phase 4: Claude diagnostic report generation
@@ -15,15 +15,15 @@
 ---
 
 ## What's Done
-- Foundation docs created (CLAUDE.md, ROADMAP.md, project_spec.md, architecture.md)
-- Tech stack decided
-- Key parameters defined
+- Foundation docs, tech stack, key parameters defined
+- Next.js 14 + TypeScript + Tailwind initialized, all deps installed
+- `src/lib/deepgram.ts` — WebSocket streaming client, is_final filtering, correct end→duration computation
+- `src/components/AudioRecorder.tsx` — start/stop UI, token fetch, live timer
+- Phase 1 verified: 25 words captured with correct timestamps, durations, confidence, and pause gaps
 
 ## What's Next
-1. Initialize Next.js project with TypeScript + Tailwind
-2. Add Deepgram SDK and Anthropic SDK
-3. Build deepgram.ts streaming client
-4. Verify word timestamps in console before building anything on top
+1. Phase 2: `src/lib/alignment.ts` — Levenshtein alignment (test offline first)
+2. Phase 2: `src/lib/metrics.ts` — WCPM, error counts, hesitation detection, pause placement
 
 ## Blockers
 None currently

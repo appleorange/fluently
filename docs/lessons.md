@@ -4,7 +4,7 @@ Format: **Mistake** | **Rule** | **Date**
 
 ---
 
-_No entries yet. Claude updates this after every correction._
+**Deepgram word timestamp field is `end` not `duration`** | Compute `duration = w.end - w.start` in deepgram.ts — the scaffold assumed a `duration` field that doesn't exist in the API response | 2026-06-20
 
 ---
 
