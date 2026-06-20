@@ -7,19 +7,19 @@
 
 ---
 
-## Phase 1 — Foundation & Deepgram Streaming
+## Phase 1 — Foundation & Deepgram Streaming ✓
 Goal: prove audio → word timestamps pipeline works before building anything on top of it
 
-- [ ] Next.js project initialized with TypeScript and Tailwind
-- [ ] `.env.local` configured with Deepgram + Anthropic keys
-- [ ] `src/lib/deepgram.ts` — browser-side Deepgram streaming client
-  - [ ] Microphone permission request
-  - [ ] WebSocket connection to Deepgram streaming API
-  - [ ] Returns only `is_final: true` word objects with `start`, `duration`, `word` fields
-  - [ ] Console.log verified: word timestamps printing correctly
-- [ ] `src/components/AudioRecorder.tsx` — start/stop recording button, passes word stream to parent
-- [ ] Basic page renders AudioRecorder, prints raw Deepgram output to screen
-- [ ] **Verification:** speak 10 words, see 10 word objects with timestamps on screen
+- [x] Next.js project initialized with TypeScript and Tailwind
+- [x] `.env.local` configured with Deepgram + Anthropic keys
+- [x] `src/lib/deepgram.ts` — browser-side Deepgram streaming client
+  - [x] Microphone permission request
+  - [x] WebSocket connection to Deepgram streaming API
+  - [x] Returns only `is_final: true` word objects with `start`, `duration`, `word` fields
+  - [x] Console.log verified: word timestamps printing correctly
+- [x] `src/components/AudioRecorder.tsx` — start/stop recording button, passes word stream to parent
+- [x] Basic page renders AudioRecorder, prints raw Deepgram output to screen
+- [x] **Verification:** spoke 25 words, timestamps + durations + confidence all correct. Pause gaps correctly captured (hesitation detection data confirmed).
 
 ---
 
@@ -121,7 +121,8 @@ Goal: reliable, beautiful demo for judges
 ## Session Log
 | Session | Date | What was completed |
 |---------|------|--------------------|
-| 1 | — | Project initialized |
+| 1 | 2026-06-20 | Project initialized, docs created |
+| 2 | 2026-06-20 | Phase 1 complete — Deepgram streaming verified with live timestamps |
 
 ### Semantic substitution classification (stretch — add to Phase 6 if time allows)
 - [ ] For each substitution error, classify whether the substituted word preserves semantic class ("dog" → "cat" = same class) vs. doesn't ("dog" → "the" = cross-class)

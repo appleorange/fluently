@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-06-20 — Phase 1 Complete
+- Built `src/lib/deepgram.ts`: WebSocket streaming, is_final filtering, mic access, CloseStream on stop
+- Fixed word timestamp field: Deepgram returns `end` not `duration` — compute `duration = end - start`
+- Built `src/components/AudioRecorder.tsx`: start/stop button, token fetch from API route, live timer, error display
+- Wired AudioRecorder into `page.tsx` with raw word stream debug panel
+- Verified live: 25 words with correct timestamps, durations, and pause gaps captured
+
 ## 2026-06-20 — Project Initialized
 - Created project structure and all foundation docs
 - Defined full product spec, architecture, roadmap
