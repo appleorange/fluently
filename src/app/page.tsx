@@ -1,16 +1,11 @@
 'use client'
 
-// Fluently — Main Session Page
-// Orchestrates the full reading session state machine:
-// idle → recording → processing → results
-// All state lives here, passed down to child components as props
-
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage } from '@/lib/types'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse } from '@/lib/types'
 import AudioRecorder from '@/components/AudioRecorder'
-import PassageDisplay, { MOCK_PASSAGE, MOCK_WORD_STATUSES } from '@/components/PassageDisplay'
-import DiagnosticReport, { MOCK_REPORT, MOCK_ERROR_TYPE } from '@/components/DiagnosticReport'
-import MetricsDashboard, { MOCK_METRICS } from '@/components/MetricsDashboard'
+import PassageDisplay from '@/components/PassageDisplay'
+import DiagnosticReport from '@/components/DiagnosticReport'
+import MetricsDashboard from '@/components/MetricsDashboard'
 
 const PASSAGES: Record<number, string> = {
   2: '/passages/grade2.json',
@@ -22,6 +17,15 @@ const SESSION_DURATION = 60
 
 function formatTime(s: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+function getErrorType(metrics: Metrics): DiagnosticResponse['errorType'] {
+  const decodingIssue = metrics.accuracy < 90
+  const phrasingIssue = metrics.pausePlacement.boundaryPercent < 50
+  if (decodingIssue && phrasingIssue) return 'mixed'
+  if (decodingIssue) return 'decoding'
+  if (phrasingIssue) return 'phrasing'
+  return 'fluent'
 }
 
 export default function Home() {
@@ -36,6 +40,10 @@ export default function Home() {
   const [timerSeconds, setTimerSeconds] = useState(0)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const passageRef = useRef<Passage | null>(null)
+
+  // Keep passageRef in sync so real-time alignment can read it without stale closure
+  useEffect(() => { passageRef.current = passage }, [passage])
 
   const stopTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -44,81 +52,112 @@ export default function Home() {
     }
   }, [])
 
-  // Auto-stop at 60 seconds
-  useEffect(() => {
-    if (timerSeconds >= SESSION_DURATION && sessionState === 'recording') {
-      stopTimer()
-      // TODO: call handleSessionEnd() here after pipeline is connected
-      setSessionState('idle')
-    }
-  }, [timerSeconds, sessionState, stopTimer])
-
-  // Cleanup on unmount
   useEffect(() => () => stopTimer(), [stopTimer])
 
-  const startRecording = useCallback(() => {
-    setTimerSeconds(0)
-    setSessionState('recording')
-    timerRef.current = setInterval(() => {
-      setTimerSeconds(s => s + 1)
-    }, 1000)
+  // Load default passage on mount
+  useEffect(() => {
+    fetch(PASSAGES[4]).then(r => r.json()).then(setPassage)
   }, [])
 
-  const stopRecording = useCallback(() => {
-    stopTimer()
-    // TODO: call handleSessionEnd() here after pipeline is connected
-    setSessionState('idle')
-  }, [stopTimer])
-
-  // Load passage on grade selection
   const loadPassage = useCallback(async (grade: number) => {
     const res = await fetch(PASSAGES[grade])
     const data: Passage = await res.json()
     setPassage(data)
   }, [])
 
-  // Called by AudioRecorder when a new word arrives from Deepgram
   const handleWord = useCallback((word: WordTimestamp) => {
     setWordStream(prev => [...prev, word])
   }, [])
 
-  // Called when recording stops — runs full pipeline
+  // Real-time alignment: runs after every new word during recording
+  useEffect(() => {
+    if (sessionState !== 'recording' || !passageRef.current || wordStream.length === 0) return
+
+    const run = async () => {
+      const { align } = await import('@/lib/alignment')
+      const gotWords = wordStream.map(w => w.word)
+      // Look ahead by 3 to catch insertions without marking unread words as omissions
+      const lookAhead = Math.min(gotWords.length + 3, passageRef.current!.words.length)
+      const partialExpected = passageRef.current!.words.slice(0, lookAhead)
+      const alignedWords = align(partialExpected, gotWords, wordStream)
+      setAligned(alignedWords)
+    }
+    run()
+  }, [wordStream, sessionState])
+
+  // wordStatuses Map for PassageDisplay — alignment statuses + real-time hesitation detection
+  const wordStatuses = useMemo(() => {
+    const map = new Map<number, WordStatus>()
+
+    aligned.forEach(w => {
+      if (w.status !== 'insertion') map.set(w.index, w.status)
+    })
+
+    // Overlay hesitations: if gap > 500ms before a word, mark it yellow
+    // Only override 'correct' — keep error colors on error words
+    for (let i = 1; i < wordStream.length; i++) {
+      const gap = (wordStream[i].start - (wordStream[i - 1].start + wordStream[i - 1].duration)) * 1000
+      if (gap > 500) {
+        const hit = aligned.find(w => w.timestamp?.start === wordStream[i].start)
+        if (hit && map.get(hit.index) === 'correct') {
+          map.set(hit.index, 'hesitation')
+        }
+      }
+    }
+
+    return map
+  }, [aligned, wordStream])
+
   const handleSessionEnd = useCallback(async () => {
-    if (!passage || wordStream.length === 0) return
+    const currentPassage = passageRef.current
+    if (!currentPassage || wordStream.length === 0) return
+    stopTimer()
     setSessionState('processing')
 
     try {
-      // 1. Align transcript against expected passage
       const { align } = await import('@/lib/alignment')
       const gotWords = wordStream.map(w => w.word)
-      const alignedWords = align(passage.words, gotWords, wordStream)
+      const alignedWords = align(currentPassage.words, gotWords, wordStream)
       setAligned(alignedWords)
 
-      // 2. Compute metrics
       const { computeMetrics } = await import('@/lib/metrics')
-      const computedMetrics = await computeMetrics(alignedWords, wordStream, passage.text)
+      const computedMetrics = await computeMetrics(alignedWords, wordStream, currentPassage.text)
       setMetrics(computedMetrics)
 
-      // 3. Get Claude diagnostic report
       const res = await fetch('/api/diagnose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           metrics: computedMetrics,
-          passageGrade: passage.grade,
-          passageTitle: passage.title
+          passageGrade: currentPassage.grade,
+          passageTitle: currentPassage.title
         })
       })
       const data = await res.json()
       setReport(data.report)
       setSessionState('results')
-    } catch (err) {
-      setError('Something went wrong processing the session. Please try again.')
+    } catch {
+      setError('Something went wrong. Please try again.')
       setSessionState('idle')
     }
-  }, [passage, wordStream])
+  }, [wordStream, stopTimer])
 
-  const handleReset = () => {
+  const startRecording = useCallback(() => {
+    setTimerSeconds(0)
+    setWordStream([])
+    setAligned([])
+    setSessionState('recording')
+    timerRef.current = setInterval(() => setTimerSeconds(s => s + 1), 1000)
+  }, [])
+
+  // Auto-stop at 60s
+  useEffect(() => {
+    if (timerSeconds >= SESSION_DURATION && sessionState === 'recording') {
+      handleSessionEnd()
+    }
+  }, [timerSeconds, sessionState, handleSessionEnd])
+
+  const handleReset = useCallback(() => {
     stopTimer()
     setTimerSeconds(0)
     setSessionState('idle')
@@ -127,7 +166,7 @@ export default function Home() {
     setMetrics(null)
     setReport('')
     setError('')
-  }
+  }, [stopTimer])
 
   const isNearEnd = timerSeconds >= 50
   const remaining = SESSION_DURATION - timerSeconds
@@ -144,7 +183,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* Grade selector — only shown when idle */}
+        {/* Headless Deepgram manager — reacts to sessionState */}
+        <AudioRecorder
+          sessionState={sessionState}
+          onWord={handleWord}
+          onError={(msg) => { setError(msg); setSessionState('idle'); stopTimer() }}
+        />
+
+        {/* Grade selector */}
         {sessionState === 'idle' && (
           <div className="mb-6">
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -168,7 +214,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Session timer display */}
+        {/* Session timer + controls */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
           {sessionState === 'idle' && (
             <div className="flex items-center justify-between">
@@ -178,7 +224,8 @@ export default function Home() {
               </div>
               <button
                 onClick={startRecording}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                disabled={!passage}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold rounded-lg transition-colors"
               >
                 Start Reading
               </button>
@@ -196,7 +243,7 @@ export default function Home() {
                 )}
               </div>
               <button
-                onClick={stopRecording}
+                onClick={handleSessionEnd}
                 className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-colors"
               >
                 Stop
@@ -230,40 +277,18 @@ export default function Home() {
           )}
         </div>
 
-        {/* AudioRecorder — handles mic access and Deepgram streaming */}
-        <div className="mb-6">
-          <AudioRecorder
-            onWord={handleWord}
-            onStop={handleSessionEnd}
-            sessionState={sessionState}
-            setSessionState={setSessionState}
-          />
-        </div>
-
-        {/* Phase 1 verification: raw word stream — remove once pipeline is verified */}
-        {wordStream.length > 0 && (
-          <div className="bg-slate-900 rounded-xl p-4 mb-6">
-            <p className="text-slate-400 text-xs font-mono mb-3">
-              DEEPGRAM OUTPUT — {wordStream.length} words
-            </p>
-            <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
-              {wordStream.map((w, i) => (
-                <div key={i} className="font-mono text-xs text-green-400">
-                  {String(i + 1).padStart(2, '0')}. &quot;{w.word}&quot; — start: {w.start.toFixed(3)}s  duration: {w.duration.toFixed(3)}s  conf: {(w.confidence * 100).toFixed(0)}%
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Passage — always visible when loaded, colors update in real time */}
+        {passage && (
+          <PassageDisplay passage={passage} wordStatuses={wordStatuses} />
         )}
 
-        {/* Passage display — always visible so reader can follow along */}
-        {/* TODO: replace mock with live passage + wordStatuses from pipeline */}
-        <PassageDisplay passage={MOCK_PASSAGE} wordStatuses={MOCK_WORD_STATUSES} />
-
-        {/* Results — shown after session ends */}
-        {/* TODO: gate on sessionState === 'results' once pipeline is connected */}
-        <MetricsDashboard metrics={MOCK_METRICS} targetWCPM={MOCK_PASSAGE.targetWCPM} />
-        <DiagnosticReport report={MOCK_REPORT} errorType={MOCK_ERROR_TYPE} />
+        {/* Results — only shown after session completes */}
+        {sessionState === 'results' && metrics && (
+          <MetricsDashboard metrics={metrics} targetWCPM={passage?.targetWCPM} />
+        )}
+        {sessionState === 'results' && report && metrics && (
+          <DiagnosticReport report={report} errorType={getErrorType(metrics)} />
+        )}
       </div>
     </main>
   )

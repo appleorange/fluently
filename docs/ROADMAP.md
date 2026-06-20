@@ -81,41 +81,30 @@ Goal: structured metrics → plain-language clinical report
 
 ---
 
-## Phase 5 — PassageMap (2D Passage Selector)
-Goal: replace the simple grade picker with a 2D draggable canvas that selects passages by complexity + register
+## Phase 5 — PassageMap (2D Passage Selector with AI Generation)
+Goal: replace the simple grade picker with a 2D canvas that generates unlimited passages on demand via Claude
 
 ### Concept
-X-axis: **Complexity** (Flesch-Kincaid grade level, sentence length, syllable density)
-Y-axis: **Register/Purpose** (formal ↔ casual — measured via contraction density, Latinate vs Germanic vocabulary, passive voice frequency)
+X-axis: **Complexity** (simple → complex)
+Y-axis: **Register** (casual → formal)
 
-The canvas has 9 pre-generated passages at a 3x3 grid of coordinates. Dragging snaps to the nearest passage — feels continuous, no generation latency.
-
-### Passages to pre-generate (3x3 grid)
-| | Casual | Neutral | Formal |
-|---|---|---|---|
-| **Simple** | friendly text message story | simple news story | simple government notice |
-| **Medium** | social media thread | newspaper article | HR policy excerpt |
-| **Complex** | dense internet/slang dialogue | academic abstract | legal contract clause |
+User drops a pin anywhere on the canvas. Claude generates a fresh ~70-word reading passage matching those coordinates. No fixed grid, no pre-generation — unlimited variety. A loading state shows while Claude generates; the passage appears and the session can start.
 
 ### Tasks
-- [ ] `src/lib/passageMap.ts` — register scoring functions
-  - [ ] Contraction density (count contractions / total words)
-  - [ ] Latinate vocabulary ratio (words with -tion, -ment, -ance, -ity suffixes)
-  - [ ] Passive voice density (via compromise.js passive detection)
-  - [ ] Flesch-Kincaid computation (already in spec — 1.015 × avg sentence length + 84.6 × avg syllables/word - 15.59)
-  - [ ] `scorePassage(text): {complexity: number, register: number}` — returns normalized 0-1 coordinates
-- [ ] `public/passages/` — expand to 9 passages covering the 3x3 grid, each with pre-computed x/y coordinates
-  - [ ] Remove hardcoded `words` array from all passage files — derive from `text.split(/\s+/)` at runtime
-- [ ] `src/components/PassageMap.tsx` — 2D draggable canvas
-  - [ ] SVG or Canvas element, 400x400px
-  - [ ] 9 passage dots plotted at their computed coordinates
-  - [ ] Draggable crosshair snaps to nearest passage on drag
-  - [ ] Selected passage highlighted, passage title + coordinates shown below
-  - [ ] X-axis label: "Complexity →", Y-axis label: "Formal ↑ Casual ↓"
+- [ ] `src/app/api/generate-passage/route.ts` — POST endpoint
+  - [ ] Receives `{ complexity: number, register: number }` (both 0–1)
+  - [ ] Translates coordinates into plain-English descriptors (e.g. complexity 0.2 = "simple sentences, common words"; register 0.8 = "formal, professional tone")
+  - [ ] Prompts Claude to write a ~70-word passage matching those descriptors, suitable for oral reading assessment
+  - [ ] Returns `{ text: string, words: string[], title: string, complexity: number, register: number }`
+- [ ] `src/components/PassageMap.tsx` — 2D interactive canvas
+  - [ ] SVG element, 400x400px, click anywhere to drop a pin
+  - [ ] X-axis label: "Complexity →", Y-axis label: "Formal ↑"
   - [ ] Quadrant labels: Simple Casual / Simple Formal / Complex Casual / Complex Formal
+  - [ ] Pin shows loading spinner while Claude generates the passage
+  - [ ] Generated passage previewed below the canvas before starting
 - [ ] Replace grade picker on main page with PassageMap component
-- [ ] Claude diagnostic prompt updated to reference register context: "This was a [formal/casual] [simple/complex] passage — calibrate feedback accordingly"
-- [ ] **Verification:** drag to each of the 9 positions, confirm correct passage loads each time
+- [ ] Claude diagnostic prompt updated to reference register/complexity context: "This was a [formal/casual], [simple/complex] passage — calibrate feedback accordingly"
+- [ ] **Verification:** click 5 different positions, confirm each generates a distinct passage matching the selected complexity and register
 
 ---
 

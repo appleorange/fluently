@@ -34,7 +34,7 @@ export default function PassageDisplay({ passage, wordStatuses }: PassageDisplay
       </div>
 
       <p className="leading-loose text-base select-none">
-        {passage.words.map((word, i) => {
+        {passage.text.trim().split(/\s+/).map((word, i) => {
           const status = wordStatuses.get(i) ?? 'pending'
           return (
             <span key={i} className="inline">
