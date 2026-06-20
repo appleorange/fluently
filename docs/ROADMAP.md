@@ -23,20 +23,20 @@ Goal: prove audio → word timestamps pipeline works before building anything on
 
 ---
 
-## Phase 2 — Levenshtein Alignment Pipeline
+## Phase 2 — Levenshtein Alignment Pipeline ✓
 Goal: deterministic scoring engine working offline before connecting to live audio
 
-- [ ] `public/passages/` — 3 hardcoded passages at grade levels 2, 4, 6 (from Project Gutenberg)
-- [ ] `src/lib/alignment.ts` — Levenshtein alignment function
-  - [ ] Normalize both strings (lowercase, strip punctuation) before comparing
-  - [ ] Return array of word objects: `{expected, got, status: correct|substitution|omission|insertion}`
-  - [ ] Tested offline with fake input before connecting to Deepgram
-- [ ] `src/lib/metrics.ts` — computes scoring from alignment output + timestamps
-  - [ ] WCPM (words correct per minute)
-  - [ ] Error count by type (substitution / omission / insertion)
-  - [ ] Hesitation detection (pause > 500ms between consecutive words)
-  - [ ] Pause placement analysis (pauses at syntactic boundaries vs mid-phrase via compromise.js)
-- [ ] **Verification:** paste fake aligned output, see correct metrics computed
+- [x] `public/passages/` — 3 hardcoded passages at grade levels 2, 4, 6 (from Project Gutenberg)
+- [x] `src/lib/alignment.ts` — Levenshtein alignment function
+  - [x] Normalize both strings (lowercase, strip punctuation) before comparing
+  - [x] Return array of word objects: `{expected, got, status: correct|substitution|omission|insertion}`
+  - [x] Tested offline with fake input before connecting to Deepgram
+- [x] `src/lib/metrics.ts` — computes scoring from alignment output + timestamps
+  - [x] WCPM (words correct per minute)
+  - [x] Error count by type (substitution / omission / insertion)
+  - [x] Hesitation detection (pause > 500ms between consecutive words)
+  - [x] Pause placement analysis (pauses at syntactic boundaries vs mid-phrase via compromise.js)
+- [x] **Verification:** offline test with fake aligned output — all statuses, WCPM, hesitation, and pause placement correct
 
 ---
 

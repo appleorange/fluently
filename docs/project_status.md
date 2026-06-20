@@ -7,7 +7,7 @@
 
 ## Milestone Checklist
 - [x] Phase 1: Deepgram streaming with word timestamps verified
-- [ ] Phase 2: Levenshtein alignment pipeline working offline
+- [x] Phase 2: Levenshtein alignment pipeline working offline
 - [ ] Phase 3: Real-time word-by-word color coding UI
 - [ ] Phase 4: Claude diagnostic report generation
 - [ ] Phase 5: Polish and demo-ready
@@ -22,8 +22,8 @@
 - Phase 1 verified: 25 words captured with correct timestamps, durations, confidence, and pause gaps
 
 ## What's Next
-1. Phase 2: `src/lib/alignment.ts` — Levenshtein alignment (test offline first)
-2. Phase 2: `src/lib/metrics.ts` — WCPM, error counts, hesitation detection, pause placement
+1. Phase 4: `src/app/api/diagnose/route.ts` — prompt engineering for Claude diagnostic report
+2. Sync with friend when Phase 3 (UI components) is done, then wire pipeline to page.tsx together
 
 ## Blockers
 None currently
