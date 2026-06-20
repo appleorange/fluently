@@ -116,6 +116,16 @@ Goal: reliable, beautiful demo for judges
 - [ ] Identify best demo passage (something with interesting errors likely — medium complexity, formal register)
 - [ ] **Verification:** full end-to-end demo works 3 times in a row without breaking
 
+### Redis session caching
+- [ ] Sign up for Upstash at upstash.com, get REST URL and token
+- [ ] Install `@upstash/redis`
+- [ ] Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to `.env.local` and `.env.example`
+- [ ] `src/lib/redis.ts` — initialize Upstash Redis client, verify connection with a test read/write
+- [ ] Update `src/app/api/diagnose/route.ts` — check Redis for previous attempt on same passage before calling Claude, include previous metrics in Claude prompt if found, store current attempt with 24hr TTL after Claude responds
+- [ ] Update `DiagnosticReport.tsx` — if previous attempt exists in response, show comparison row above report ("Last attempt: 87 WCPM → This attempt: 94 WCPM" with green arrow if improved, red if regressed)
+- [ ] Update `page.tsx` — generate `sessionId` with `crypto.randomUUID()` on first load, pass to diagnose API call
+- [ ] **Verification:** do two reads of the same passage, confirm second report references the first attempt's metrics
+
 ---
 
 ## Session Log
