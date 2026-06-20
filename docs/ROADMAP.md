@@ -130,6 +130,13 @@ Goal: reliable, beautiful demo for judges
 - [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
 - [ ] Enable disfluency detection in Deepgram params — detect verbal hesitations ("um", "uh", repetitions) as a second hesitation signal alongside timestamp gap detection. Pass disfluency count separately in the metrics object so Claude can distinguish verbal vs silent hesitations
 
+### Self-correction as first-class signal
+- [ ] Update `src/lib/metrics.ts` — compute self-correction rate as its own top-level metric: `selfCorrections: number`, `totalErrors: number`, `selfCorrectionRate: number` (0–1). Currently buried in the error log; needs to be a named field Claude explicitly receives
+- [ ] Update `src/lib/types.ts` — add `selfCorrectionRate: number` to the `Metrics` interface
+- [ ] Update `src/app/api/diagnose/route.ts` — add self-correction to the Claude prompt as a distinct positive signal, not part of the error section. Prompt should instruct Claude: if `selfCorrectionRate > 0`, explicitly praise it before addressing errors (e.g. "You caught and fixed 4 of your 6 errors — that metacognitive monitoring is a real strength."). If `selfCorrectionRate` is 0 and error count is high, note the absence as a signal worth working on
+- [ ] Update `DiagnosticReport.tsx` — show self-corrections as a separate stat card with positive visual treatment (green, upward arrow icon), distinct from error metrics (red/yellow). Never group it with errors visually
+- [ ] **Verification:** simulate a session with 3 self-corrections, confirm Claude report leads with explicit praise for self-corrections before addressing remaining errors
+
 ### Longitudinal error tracking (diagnostic arc)
 - [ ] Extend Redis schema to store per-session error log: `{type, word, syntacticContext, passageId, timestamp}` per error instance, keyed by a persistent `readerId` (simple UUID stored in localStorage)
 - [ ] After 3+ sessions, change the Claude diagnostic prompt from snapshot mode to longitudinal mode — pass the aggregated error history and ask Claude to identify which error types are persisting, worsening, or resolving across sessions
