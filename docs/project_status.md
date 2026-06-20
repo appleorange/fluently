@@ -1,7 +1,7 @@
 # Fluently — Project Status
 
 **Last Updated:** 2026-06-20
-**Current Phase:** Phase 1 — Foundation & Deepgram Streaming
+**Current Phase:** Phase 3 UI complete (parallel track) / Phase 1 in progress (friend's track)
 
 ---
 
@@ -16,14 +16,15 @@
 
 ## What's Done
 - Foundation docs created (CLAUDE.md, ROADMAP.md, project_spec.md, architecture.md)
-- Tech stack decided
-- Key parameters defined
+- Tech stack decided, key parameters defined
+- `src/components/PassageDisplay.tsx` — Phase 3 UI, word-by-word color coding, browser-verified
+- `src/components/DiagnosticReport.tsx` — report card for parent/teacher, browser-verified
+- `src/components/MetricsDashboard.tsx` — WCPM/accuracy/error stats, browser-verified
 
 ## What's Next
-1. Initialize Next.js project with TypeScript + Tailwind
-2. Add Deepgram SDK and Anthropic SDK
-3. Build deepgram.ts streaming client
-4. Verify word timestamps in console before building anything on top
+- **Me:** Wire `page.tsx` to accept real data from pipeline once friend finishes Phase 1+2; then Phase 5 PassageMap
+- **Friend:** Phase 1 (Deepgram streaming) → Phase 2 (alignment + metrics) → Phase 4 (Claude API route)
+- **Merge point:** friend finishes Phase 1+2, I finish Phase 3 → connect pipeline to UI in page.tsx together
 
 ## Blockers
-None currently
+Phase 1/2 (deepgram.ts, alignment.ts, metrics.ts) being built by friend — UI can proceed with mock data. Merge point: when both Phase 1+2 (her side) and Phase 3 (my side) are done.

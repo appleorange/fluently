@@ -43,28 +43,41 @@ Goal: deterministic scoring engine working offline before connecting to live aud
 ## Phase 3 — Real-Time UI
 Goal: live reading session with word-by-word color coding
 
-- [ ] `src/components/PassageDisplay.tsx`
-  - [ ] Renders passage word by word as spans
-  - [ ] Colors update in real time as Deepgram returns words
-  - [ ] Green = correct, Red = error, Yellow = hesitation
-  - [ ] Smooth, readable layout — not a wall of colored text
-- [ ] Connect Deepgram stream → alignment → PassageDisplay in real time
-- [ ] Session timer (counts up during reading, stops at 60 seconds or manual stop)
-- [ ] **Verification:** read passage live, see words color-coded correctly in real time
+- [x] `src/components/PassageDisplay.tsx`
+  - [x] Renders passage word by word as spans
+  - [x] Colors update in real time as Deepgram returns words (via Map<number, WordStatus> prop)
+  - [x] Green = correct, Red = error, Yellow = hesitation, gray = pending
+  - [x] Smooth, readable layout — flowing text with subtle background highlights
+  - [x] Verified rendering in browser with mock data (2026-06-20)
+- [ ] Connect Deepgram stream → alignment → PassageDisplay in real time **[post-merge]**
+- [x] Session timer (counts up during reading, stops at 60 seconds or manual stop)
+  - [x] Counts up in page.tsx state with setInterval ref
+  - [x] Auto-stops at 60s, warns at 50s (amber color + countdown)
+  - [x] Start Reading / Stop buttons with idle/recording/processing/results states
+  - [x] Verified in browser (2026-06-20)
+- [ ] **Verification:** read passage live, see words color-coded correctly in real time **[post-merge]**
 
 ---
 
 ## Phase 4 — Claude Diagnostic Report
 Goal: structured metrics → plain-language clinical report
 
-- [ ] `src/app/api/diagnose/route.ts` — POST endpoint
+- [ ] `src/app/api/diagnose/route.ts` — POST endpoint **[friend owns this]**
   - [ ] Receives structured metrics JSON (never raw audio or transcript)
   - [ ] Constructs diagnostic prompt with full error log
   - [ ] Returns Claude's plain-language report
-- [ ] Prompt engineering: Claude must distinguish decoding vs phrasing fluency issues from structured data
-- [ ] `src/components/DiagnosticReport.tsx` — renders report cleanly for parent/teacher
-- [ ] `src/components/MetricsDashboard.tsx` — visual breakdown of WCPM, error types, pause placement
-- [ ] **Verification:** submit fake metrics, get clinically meaningful report back
+- [ ] Prompt engineering: Claude must distinguish decoding vs phrasing fluency issues from structured data **[friend owns this]**
+- [x] `src/components/DiagnosticReport.tsx` — renders report cleanly for parent/teacher
+  - [x] Error-type badge (fluent/phrasing/mixed/decoding, color-coded)
+  - [x] Paragraph rendering with **bold** support for Claude markdown
+  - [x] Verified in browser with mock data (2026-06-20)
+- [x] `src/components/MetricsDashboard.tsx` — visual breakdown of WCPM, error types, pause placement
+  - [x] WCPM prominently displayed with color severity (green/yellow/red vs target)
+  - [x] Accuracy + duration stat cards
+  - [x] Error breakdown as CSS horizontal bars (substitutions/omissions/insertions/hesitations)
+  - [x] Pause placement progress bar with boundary percentage
+  - [x] Verified in browser with mock data (2026-06-20)
+- [ ] **Verification:** submit fake metrics, get clinically meaningful report back **[after merge]**
 
 ---
 
@@ -122,6 +135,9 @@ Goal: reliable, beautiful demo for judges
 | Session | Date | What was completed |
 |---------|------|--------------------|
 | 1 | — | Project initialized |
+| 2 | 2026-06-20 | PassageDisplay.tsx — Phase 3 UI layer, word-by-word color coding component |
+| 3 | 2026-06-20 | DiagnosticReport.tsx + MetricsDashboard.tsx — Phase 3 UI complete |
+| 4 | 2026-06-20 | Reverted Phase 4 changes — API route and prompt engineering are friend's responsibility |
 
 ### Semantic substitution classification (stretch — add to Phase 6 if time allows)
 - [ ] For each substitution error, classify whether the substituted word preserves semantic class ("dog" → "cat" = same class) vs. doesn't ("dog" → "the" = cross-class)
