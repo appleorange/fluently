@@ -1,15 +1,10 @@
 'use client'
 
-// Fluently — Main Session Page
-// Orchestrates the full reading session state machine:
-// idle → recording → processing → results
-// All state lives here, passed down to child components as props
-
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage } from '@/lib/types'
+import AudioRecorder from '@/components/AudioRecorder'
 
-// TODO: import components as they are built
-// import AudioRecorder from '@/components/AudioRecorder'
+// TODO: import as friend completes Phase 3
 // import PassageDisplay from '@/components/PassageDisplay'
 // import DiagnosticReport from '@/components/DiagnosticReport'
 // import MetricsDashboard from '@/components/MetricsDashboard'
@@ -123,13 +118,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Components render here — Claude Code fills these in as phases complete */}
-        {/* <PassageDisplay passage={passage} aligned={aligned} sessionState={sessionState} /> */}
-        {/* <AudioRecorder onWord={handleWord} onStop={handleSessionEnd} sessionState={sessionState} setSessionState={setSessionState} /> */}
-        {/* {sessionState === 'results' && metrics && <MetricsDashboard metrics={metrics} />} */}
-        {/* {sessionState === 'results' && report && <DiagnosticReport report={report} />} */}
-
-        {/* Placeholder UI until components are built */}
         {passage && (
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
             <h2 className="font-semibold text-slate-700 mb-3">{passage.title} — Grade {passage.grade}</h2>
@@ -137,9 +125,33 @@ export default function Home() {
           </div>
         )}
 
-        <div className="text-slate-400 text-sm">
-          Session state: <span className="font-mono">{sessionState}</span>
-          {wordStream.length > 0 && ` — ${wordStream.length} words captured`}
+        <div className="mb-6">
+          <AudioRecorder
+            onWord={handleWord}
+            onStop={handleSessionEnd}
+            sessionState={sessionState}
+            setSessionState={setSessionState}
+          />
+        </div>
+
+        {/* Phase 1 verification: raw word stream — remove once pipeline is verified */}
+        {wordStream.length > 0 && (
+          <div className="bg-slate-900 rounded-xl p-4 mb-6">
+            <p className="text-slate-400 text-xs font-mono mb-3">
+              DEEPGRAM OUTPUT — {wordStream.length} words
+            </p>
+            <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+              {wordStream.map((w, i) => (
+                <div key={i} className="font-mono text-xs text-green-400">
+                  {String(i + 1).padStart(2, '0')}. &quot;{w.word}&quot; — start: {w.start.toFixed(3)}s  duration: {w.duration.toFixed(3)}s  conf: {(w.confidence * 100).toFixed(0)}%
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="text-slate-400 text-xs font-mono">
+          state: {sessionState}
         </div>
 
         {sessionState === 'results' && (
