@@ -274,9 +274,19 @@ Two data structures per reader:
 
 ### Deepgram depth
 - [x] Switched streaming model from `nova-2` to `nova-3` in `src/lib/deepgram.ts` for better transcription accuracy
-- [x] Capture confidence scores from Deepgram word objects — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
+- [x] Capture confidence scores from Deepgram word objects — if confidence < 0.75 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise (threshold raised from 0.7 → 0.75 as part of accent fairness work, below)
   - [x] Implemented in `alignment.ts` for both the substitution branch and both insertion branches (originally only substitutions were covered — a live test surfaced a confidence-0.21 insertion still counting as a real error; fixed via a shared `isLowConfidence()` helper)
   - [x] **Verified live** (2026-06-20): read a real passage, inspected raw aligned output. Low-confidence substitutions (0.41–0.57) correctly downgraded to `uncertain`; high-confidence substitutions (0.89–0.99) correctly stayed `substitution`; confirmed fix against the exact low-confidence insertion case found live
+
+### Accent fairness
+Children shouldn't be penalized for accent. Two changes:
+- [x] `src/lib/deepgram.ts` — `language: 'en-US'` → `'en'` (accent-agnostic English recognition instead of optimizing for American pronunciation norms specifically)
+- [x] Confidence threshold raised from 0.7 → 0.75 (see "Deepgram depth" above — same mechanism, just a stricter cutoff so more borderline-confidence words get treated as uncertain rather than a confirmed error)
+- [x] `src/lib/metrics.ts` — added `uncertainCount` as a real `Metrics` field (computed from `aligned`), and fixed a real bug found along the way: the accuracy denominator (`totalExpected`) excluded `insertion` status but not `uncertain`, so an uncertain word was silently dragging accuracy down despite not counting as any error type. Now excluded from both.
+- [x] `src/app/api/diagnose/route.ts` — passes `uncertainCount` to Claude as its own line, separate from the error taxonomy, instructing Claude not to reference uncertain words as errors (they may reflect accent variation or background noise, not a reading mistake)
+- [x] `src/components/PassageDisplay.tsx` — uncertain words show an "unclear audio" tooltip on hover. Started with the native HTML `title` attribute (confirmed present in the DOM, but native tooltips proved unreliable — delay-sensitive, sometimes suppressed by the OS); replaced with an instant custom CSS tooltip instead
+- [x] `docs/project_spec.md` — added the accent-fairness note to Engineering Rules
+- [x] **Verified live** (2026-06-21): ran two real sessions with deliberately unclear pronunciation — confirmed multiple words rendered gray/italic (not red), confirmed the count matched what was visually shown, confirmed the custom tooltip appears instantly on hover
 
 ### Disfluency detection — dropped
 Explored using Deepgram's `filler_words` param to distinguish verbal hesitations ("um"/"uh") from silent pauses. Dropped for two reasons: (1) `filler_words` is only supported in **streaming** mode for the base `Nova` model and `Flux` — confirmed via docs and a live test that `nova-3` + `filler_words: true` returns zero filler tokens; (2) more fundamentally, filler words are a feature of spontaneous speech (stalling while generating novel content), not oral reading aloud (the words are already on the page — a struggling reader decodes or pauses, doesn't search for words). `ErrorCounts.hesitations` stays a single gap-based count.
