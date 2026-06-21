@@ -332,12 +332,12 @@ export default function PracticePage() {
         {/* ── Idle state ── */}
         {sessionState === 'idle' && (
           <div className="grid grid-cols-[360px_1fr] gap-6 items-start">
-            {/* PassageMap */}
+            {/* PassageMap — no selection shown at all until a passage has actually been chosen */}
             <PassageMap
               onGenerate={handleGeneratePassage}
               isGenerating={isGenerating}
-              initialComplexity={mapComplexity}
-              initialRegister={mapRegister}
+              initialComplexity={passage ? mapComplexity : undefined}
+              initialRegister={passage ? mapRegister : undefined}
               recommendedPosition={null}
             />
 

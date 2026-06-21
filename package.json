@@ -13,6 +13,7 @@
     "@deepgram/sdk": "^3.0.0",
     "compromise": "^14.0.0",
     "diff-match-patch": "^1.0.5",
+    "gsap": "^3.15.0",
     "next": "14.2.0",
     "react": "^18",
     "react-dom": "^18",

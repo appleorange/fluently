@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import DotGrid from './DotGrid'
 
 interface PassageMapProps {
   onGenerate: (complexity: number, register: number) => void
@@ -12,27 +13,33 @@ interface PassageMapProps {
 }
 
 const SIZE = 360
-const DOT_STEP = 20
-const DOT_R = 2
-const POINT_R = 8
+const GRID_DOT_SIZE = 3 // matches the DotGrid dotSize prop below
+const SELECTED_DOT_R = GRID_DOT_SIZE // radius = grid dot's own diameter = twice its radius
+const DOT_ACTIVE_COLOR = '#3c1bc4'
+const SELECTED_DOT_COLOR = '#1e3a8a' // navy
+
+function toPoint(complexity: number, register: number) {
+  return { x: complexity * SIZE, y: (1 - register) * SIZE }
+}
 
 export default function PassageMap({
   onGenerate,
   isGenerating,
-  initialComplexity = 0.5,
-  initialRegister = 0.5,
+  initialComplexity,
+  initialRegister,
   recommendedPosition = null,
   readOnly = false
 }: PassageMapProps) {
-  const [pos, setPos] = useState({
-    x: initialComplexity * SIZE,
-    y: (1 - initialRegister) * SIZE
-  })
+  // No selection at all until the reader actually picks a spot — initialComplexity/Register are
+  // only passed by the caller once a real choice exists (e.g. the passage just read).
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(
+    initialComplexity !== undefined && initialRegister !== undefined
+      ? toPoint(initialComplexity, initialRegister)
+      : null
+  )
 
-  const recommended = recommendedPosition
-    ? { x: recommendedPosition.complexity * SIZE, y: (1 - recommendedPosition.register) * SIZE }
-    : null
-  const showArrow = recommended && Math.hypot(recommended.x - pos.x, recommended.y - pos.y) > 6
+  const recommended = recommendedPosition ? toPoint(recommendedPosition.complexity, recommendedPosition.register) : null
+  const showArrow = !!(recommended && pos && Math.hypot(recommended.x - pos.x, recommended.y - pos.y) > 6)
   const dragging = useRef(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -49,14 +56,12 @@ export default function PassageMap({
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId)
     dragging.current = true
-    const p = toSVGPos(e.clientX, e.clientY)
-    setPos(p)
+    setPos(toSVGPos(e.clientX, e.clientY))
   }
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!dragging.current) return
-    const p = toSVGPos(e.clientX, e.clientY)
-    setPos(p)
+    setPos(toSVGPos(e.clientX, e.clientY))
   }
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -67,29 +72,41 @@ export default function PassageMap({
     onGenerate(p.x / SIZE, 1 - p.y / SIZE)
   }
 
-  // Build dot grid
-  const dots: React.ReactNode[] = []
-  for (let x = DOT_STEP; x < SIZE; x += DOT_STEP) {
-    for (let y = DOT_STEP; y < SIZE; y += DOT_STEP) {
-      dots.push(<circle key={`${x}-${y}`} cx={x} cy={y} r={DOT_R} fill="#e2e8f0" />)
-    }
-  }
-
   return (
     <div className="flex flex-col gap-1 select-none">
       {/* Canvas — labels live inside the SVG so alignment is exact */}
-      <div className="relative">
+      <div className="relative rounded-xl border border-slate-200 bg-white overflow-hidden" style={{ width: SIZE, height: SIZE }}>
+        {/* Animated dot grid background — reacts to hover (proximity glow) and click (shockwave) */}
+        <div className="absolute inset-0">
+          <DotGrid
+            dotSize={GRID_DOT_SIZE}
+            gap={10}
+            baseColor="#e2e8f0"
+            activeColor={DOT_ACTIVE_COLOR}
+            proximity={80}
+            shockRadius={150}
+            shockStrength={5}
+            resistance={750}
+            returnDuration={1.5}
+            lockedPointer={pos}
+          />
+        </div>
+
         <svg
           ref={svgRef}
           width={SIZE}
           height={SIZE}
-          className="rounded-xl border border-slate-200 bg-white touch-none"
+          className="absolute inset-0 touch-none"
           style={{ cursor: isGenerating ? 'wait' : readOnly ? 'default' : 'crosshair' }}
           onPointerDown={isGenerating || readOnly ? undefined : handlePointerDown}
           onPointerMove={isGenerating || readOnly ? undefined : handlePointerMove}
           onPointerUp={isGenerating || readOnly ? undefined : handlePointerUp}
         >
-          {dots}
+          <defs>
+            <marker id="rec-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb" />
+            </marker>
+          </defs>
 
           {/* Y-axis — vertical line through center */}
           <line x1={SIZE / 2} y1={0} x2={SIZE / 2} y2={SIZE} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" style={{ pointerEvents: 'none' }} />
@@ -104,13 +121,8 @@ export default function PassageMap({
           {/* Recommended next position — dot always shows when a recommendation exists (even if
               it's the same spot as the current pin — that's a valid "stay here" outcome); the
               arrow only draws when there's an actual meaningful distance to point across. */}
-          {recommended && showArrow && (
+          {recommended && pos && showArrow && (
             <>
-              <defs>
-                <marker id="rec-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-                  <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb" />
-                </marker>
-              </defs>
               <line
                 x1={pos.x} y1={pos.y} x2={recommended.x} y2={recommended.y}
                 stroke="#2563eb" strokeWidth={2} strokeDasharray="5 4"
@@ -120,22 +132,23 @@ export default function PassageMap({
             </>
           )}
 
-          {/* Draggable point */}
-          <circle
-            cx={pos.x}
-            cy={pos.y}
-            r={POINT_R}
-            fill="#f97316"
-            stroke="#c2410c"
-            strokeWidth={2.5}
-            style={{ filter: 'drop-shadow(0 2px 6px rgba(249,115,22,0.45))', pointerEvents: 'none' }}
-          />
+          {/* Selected position — a solid navy dot, twice the size of the background grid dots.
+              Nothing renders here at all until the reader actually picks a position. */}
+          {pos && (
+            <circle
+              cx={pos.x}
+              cy={pos.y}
+              r={SELECTED_DOT_R}
+              fill={SELECTED_DOT_COLOR}
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
 
           {/* Recommendation is the same spot as current — show as a blue halo ring around the
-              orange pin instead of a coincident dot that would just be hidden underneath it */}
-          {recommended && !showArrow && (
+              selected dot instead of a coincident dot that would just be hidden underneath it */}
+          {recommended && pos && !showArrow && (
             <circle
-              cx={pos.x} cy={pos.y} r={POINT_R + 4}
+              cx={pos.x} cy={pos.y} r={SELECTED_DOT_R + 4}
               fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="3 3"
               style={{ pointerEvents: 'none' }}
             />
