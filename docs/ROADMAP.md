@@ -79,30 +79,34 @@ Goal: structured metrics → plain-language clinical report
 
 ---
 
-## Phase 5 — PassageMap (2D Passage Selector with AI Generation)
+## Phase 5 — PassageMap (2D Passage Selector with AI Generation) ✓
 Goal: replace the simple grade picker with a 2D canvas that generates unlimited passages on demand via Claude
 
 ### Concept
-X-axis: **Complexity** (simple → complex)
-Y-axis: **Register** (casual → formal)
+X-axis: **Complexity** — kindergarten (left) to adult 18+ proficiency (right)
+Y-axis: **Register** — Casual at bottom (leisure/social), Formal at top (academic/professional)
+The full register range implicitly encompasses: casual → friendly → networking → interview → formal
 
-User drops a pin anywhere on the canvas. Claude generates a fresh ~70-word reading passage matching those coordinates. No fixed grid, no pre-generation — unlimited variety. A loading state shows while Claude generates; the passage appears and the session can start.
+User drags a red-orange pin anywhere on the dotted canvas. On release, Claude generates a fresh ~70-word passage matching those coordinates. Spinner overlays canvas while generating; passage appears below. No fixed grid — unlimited variety.
 
 ### Tasks
-- [ ] `src/app/api/generate-passage/route.ts` — POST endpoint
-  - [ ] Receives `{ complexity: number, register: number }` (both 0–1)
-  - [ ] Translates coordinates into plain-English descriptors (e.g. complexity 0.2 = "simple sentences, common words"; register 0.8 = "formal, professional tone")
-  - [ ] Prompts Claude to write a ~70-word passage matching those descriptors, suitable for oral reading assessment
-  - [ ] Returns `{ text: string, words: string[], title: string, complexity: number, register: number }`
-- [ ] `src/components/PassageMap.tsx` — 2D interactive canvas
-  - [ ] SVG element, 400x400px, click anywhere to drop a pin
-  - [ ] X-axis label: "Complexity →", Y-axis label: "Formal ↑"
-  - [ ] Quadrant labels: Simple Casual / Simple Formal / Complex Casual / Complex Formal
-  - [ ] Pin shows loading spinner while Claude generates the passage
-  - [ ] Generated passage previewed below the canvas before starting
-- [ ] Replace grade picker on main page with PassageMap component
-- [ ] Claude diagnostic prompt updated to reference register/complexity context: "This was a [formal/casual], [simple/complex] passage — calibrate feedback accordingly"
-- [ ] **Verification:** click 5 different positions, confirm each generates a distinct passage matching the selected complexity and register
+- [x] `src/app/api/generate-passage/route.ts` — POST endpoint
+  - [x] Receives `{ complexity: number, register: number }` (both 0–1)
+  - [x] Translates coordinates into plain-English descriptors across 7 complexity tiers and 5 register tiers
+  - [x] Prompts Claude to write a ~70-word prose passage with no dialogue, suitable for oral reading
+  - [x] Returns `{ text, words, title, grade, targetWCPM, source, complexity, register }`
+- [x] `src/components/PassageMap.tsx` — 2D SVG dotted canvas
+  - [x] 360×360px SVG with dot grid (dot every 20px, slate-200 dots, r=2)
+  - [x] Red-orange draggable pin (r=8, #f97316, drop shadow) — bolder than grid dots
+  - [x] Pointer capture for smooth mouse + touch drag
+  - [x] Spinner overlay while generating, canvas locked during generation
+  - [x] X-axis labels: "Easy" / "Difficult"; Y-axis labels: "Formal" (top) / "Casual" (bottom) only
+- [x] Replace grade picker in `page.tsx` with PassageMap
+  - [x] Passage starts null — user must generate before Start Reading enables
+  - [x] Map stays visible in idle and results states; hidden during recording/processing
+  - [x] "Advance" clears passage so user picks a new harder position; "Retry" keeps same passage
+- [x] Update diagnose prompt to reference complexity/register context — Claude now receives complexity tier and register descriptor, calibrates feedback accordingly (e.g. informality not penalised on casual passages)
+- [x] **Verification:** 5 positions tested via API — distinct passages confirmed, complexity (grade 2→11, WCPM 74→186) and register (casual slang vs formal prose) both correct
 
 ---
 

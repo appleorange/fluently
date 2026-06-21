@@ -6,12 +6,7 @@ import AudioRecorder from '@/components/AudioRecorder'
 import PassageDisplay from '@/components/PassageDisplay'
 import DiagnosticReport from '@/components/DiagnosticReport'
 import MetricsDashboard from '@/components/MetricsDashboard'
-
-const PASSAGES: Record<number, string> = {
-  2: '/passages/grade2.json',
-  4: '/passages/grade4.json',
-  6: '/passages/grade6.json'
-}
+import PassageMap from '@/components/PassageMap'
 
 const SESSION_DURATION = 60
 
@@ -30,8 +25,10 @@ function getErrorType(metrics: Metrics): DiagnosticResponse['errorType'] {
 
 export default function Home() {
   const [sessionState, setSessionState] = useState<SessionState>('idle')
-  const [selectedGrade, setSelectedGrade] = useState<number>(4)
   const [passage, setPassage] = useState<Passage | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [mapComplexity, setMapComplexity] = useState(0.5)
+  const [mapRegister, setMapRegister] = useState(0.5)
   const [wordStream, setWordStream] = useState<WordTimestamp[]>([])
   const [aligned, setAligned] = useState<AlignedWord[]>([])
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -44,7 +41,6 @@ export default function Home() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const passageRef = useRef<Passage | null>(null)
 
-  // Keep passageRef in sync so real-time alignment can read it without stale closure
   useEffect(() => { passageRef.current = passage }, [passage])
 
   const stopTimer = useCallback(() => {
@@ -56,15 +52,25 @@ export default function Home() {
 
   useEffect(() => () => stopTimer(), [stopTimer])
 
-  // Load default passage on mount
-  useEffect(() => {
-    fetch(PASSAGES[4]).then(r => r.json()).then(setPassage)
-  }, [])
-
-  const loadPassage = useCallback(async (grade: number) => {
-    const res = await fetch(PASSAGES[grade])
-    const data: Passage = await res.json()
-    setPassage(data)
+  const handleGeneratePassage = useCallback(async (complexity: number, register: number) => {
+    setMapComplexity(complexity)
+    setMapRegister(register)
+    setIsGenerating(true)
+    setError('')
+    try {
+      const res = await fetch('/api/generate-passage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ complexity, register })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setPassage(data)
+    } catch {
+      setError('Failed to generate passage. Please try again.')
+    } finally {
+      setIsGenerating(false)
+    }
   }, [])
 
   const handleWord = useCallback((word: WordTimestamp) => {
@@ -78,7 +84,6 @@ export default function Home() {
     const run = async () => {
       const { align } = await import('@/lib/alignment')
       const gotWords = wordStream.map(w => w.word)
-      // Look ahead by 3 to catch insertions without marking unread words as omissions
       const lookAhead = Math.min(gotWords.length + 3, passageRef.current!.words.length)
       const partialExpected = passageRef.current!.words.slice(0, lookAhead)
       const alignedWords = align(partialExpected, gotWords, wordStream)
@@ -87,7 +92,6 @@ export default function Home() {
     run()
   }, [wordStream, sessionState])
 
-  // wordStatuses Map for PassageDisplay — alignment statuses + real-time hesitation detection
   const wordStatuses = useMemo(() => {
     const map = new Map<number, WordStatus>()
 
@@ -95,8 +99,7 @@ export default function Home() {
       if (w.status !== 'insertion') map.set(w.index, w.status)
     })
 
-    // Overlay hesitations: if gap > 500ms before a word, mark it yellow
-    // Only override 'correct' — keep error colors on error words
+    // Hesitation overlay: gap > 500ms before a word, only overrides 'correct'
     for (let i = 1; i < wordStream.length; i++) {
       const gap = (wordStream[i].start - (wordStream[i - 1].start + wordStream[i - 1].duration)) * 1000
       if (gap > 500) {
@@ -107,15 +110,13 @@ export default function Home() {
       }
     }
 
-    // Overlay uncertain: low-confidence Deepgram words marked as errors get flagged
-    // as uncertain rather than definite errors — may be transcription noise, not reader error
+    // Uncertain overlay: low-confidence substitutions may be transcription noise
     const CONFIDENCE_THRESHOLD = 0.8
     aligned.forEach(w => {
       const status = map.get(w.index)
-      if (status === 'substitution' || status === 'insertion') {
-        if (w.timestamp && w.timestamp.confidence < CONFIDENCE_THRESHOLD) {
-          map.set(w.index, 'uncertain')
-        }
+      if ((status === 'substitution' || status === 'insertion') &&
+          w.timestamp && w.timestamp.confidence < CONFIDENCE_THRESHOLD) {
+        map.set(w.index, 'uncertain')
       }
     })
 
@@ -144,7 +145,9 @@ export default function Home() {
         body: JSON.stringify({
           metrics: computedMetrics,
           passageGrade: currentPassage.grade,
-          passageTitle: currentPassage.title
+          passageTitle: currentPassage.title,
+          complexity: currentPassage.complexity,
+          register: currentPassage.register
         })
       })
       const data = await res.json()
@@ -166,14 +169,13 @@ export default function Home() {
     timerRef.current = setInterval(() => setTimerSeconds(s => s + 1), 1000)
   }, [])
 
-  // Auto-stop at 60s
   useEffect(() => {
     if (timerSeconds >= SESSION_DURATION && sessionState === 'recording') {
       handleSessionEnd()
     }
   }, [timerSeconds, sessionState, handleSessionEnd])
 
-  const handleReset = useCallback(() => {
+  const resetSession = useCallback((keepPassage: boolean) => {
     stopTimer()
     setTimerSeconds(0)
     setSessionState('idle')
@@ -184,42 +186,15 @@ export default function Home() {
     setRecommendation('retry')
     setReasoning('')
     setError('')
+    if (!keepPassage) setPassage(null)
   }, [stopTimer])
 
-  const handleRetry = useCallback(() => {
-    // Reset session, keep same passage
-    stopTimer()
-    setTimerSeconds(0)
-    setSessionState('idle')
-    setWordStream([])
-    setAligned([])
-    setMetrics(null)
-    setReport('')
-    setRecommendation('retry')
-    setReasoning('')
-    setError('')
-  }, [stopTimer])
-
-  const handleAdvance = useCallback(() => {
-    // Move to next grade level
-    const grades = [2, 4, 6]
-    const nextGrade = grades[grades.indexOf(selectedGrade) + 1] ?? 6
-    setSelectedGrade(nextGrade)
-    loadPassage(nextGrade)
-    stopTimer()
-    setTimerSeconds(0)
-    setSessionState('idle')
-    setWordStream([])
-    setAligned([])
-    setMetrics(null)
-    setReport('')
-    setRecommendation('retry')
-    setReasoning('')
-    setError('')
-  }, [selectedGrade, loadPassage, stopTimer])
+  const handleRetry = useCallback(() => resetSession(true), [resetSession])
+  const handleAdvance = useCallback(() => resetSession(false), [resetSession])
 
   const isNearEnd = timerSeconds >= 50
   const remaining = SESSION_DURATION - timerSeconds
+  const showMap = sessionState === 'idle' || sessionState === 'results'
 
   return (
     <main className="min-h-screen bg-slate-50 p-8">
@@ -233,34 +208,25 @@ export default function Home() {
           </div>
         )}
 
-        {/* Headless Deepgram manager — reacts to sessionState */}
+        {/* Headless Deepgram manager */}
         <AudioRecorder
           sessionState={sessionState}
           onWord={handleWord}
           onError={(msg) => { setError(msg); setSessionState('idle'); stopTimer() }}
         />
 
-        {/* Grade selector */}
-        {sessionState === 'idle' && (
+        {/* PassageMap — visible when idle or reviewing results */}
+        {showMap && (
           <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Select grade level
-            </label>
-            <div className="flex gap-3">
-              {[2, 4, 6].map(grade => (
-                <button
-                  key={grade}
-                  onClick={() => { setSelectedGrade(grade); loadPassage(grade) }}
-                  className={`px-6 py-2 rounded-lg border font-medium transition-colors ${
-                    selectedGrade === grade
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400'
-                  }`}
-                >
-                  Grade {grade}
-                </button>
-              ))}
-            </div>
+            <p className="text-sm font-medium text-slate-700 mb-3">
+              {passage ? 'Passage selected — drag to change' : 'Drop a pin to generate a passage'}
+            </p>
+            <PassageMap
+              onGenerate={handleGeneratePassage}
+              isGenerating={isGenerating}
+              initialComplexity={mapComplexity}
+              initialRegister={mapRegister}
+            />
           </div>
         )}
 
@@ -269,13 +235,17 @@ export default function Home() {
           {sessionState === 'idle' && (
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-slate-700">Ready to read</p>
-                <p className="text-sm text-slate-400 mt-0.5">60 second session</p>
+                <p className="font-medium text-slate-700">
+                  {passage ? passage.title : 'No passage selected'}
+                </p>
+                <p className="text-sm text-slate-400 mt-0.5">
+                  {passage ? '60 second session' : 'Drop a pin above to generate one'}
+                </p>
               </div>
               <button
                 onClick={startRecording}
-                disabled={!passage}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold rounded-lg transition-colors"
+                disabled={!passage || isGenerating}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
               >
                 Start Reading
               </button>
@@ -317,22 +287,16 @@ export default function Home() {
                 <p className="font-medium text-slate-700">Session complete</p>
                 <p className="text-sm text-slate-400 mt-0.5">{formatTime(timerSeconds)} recorded</p>
               </div>
-              <button
-                onClick={handleReset}
-                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
-              >
-                New session
-              </button>
             </div>
           )}
         </div>
 
-        {/* Passage — always visible when loaded, colors update in real time */}
+        {/* Passage — visible when loaded */}
         {passage && (
           <PassageDisplay passage={passage} wordStatuses={wordStatuses} />
         )}
 
-        {/* Results — only shown after session completes */}
+        {/* Results */}
         {sessionState === 'results' && metrics && (
           <MetricsDashboard metrics={metrics} targetWCPM={passage?.targetWCPM} />
         )}
