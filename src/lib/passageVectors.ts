@@ -11,9 +11,23 @@ export interface PassageTarget {
 const SKILL_DIMENSIONS = ['complexityHandling', 'registerHandling', 'wcpmPercentile', 'pausePlacementScore', 'selfCorrectionRate'] as const
 const STEP = 0.15
 
-// Only complexityHandling/registerHandling map to a real PassageMap axis (X/Y). The other three
-// dimensions (wcpm, pause placement, self-correction) have no axis to move along, so a weakness
-// there leaves the target unchanged — Claude's existing per-session exercises address it instead.
+// selfCorrectionRate is excluded from "weakest dimension" comparisons. Unlike the other 4
+// dimensions (which can all cleanly reach 1.0 for a strong reader), selfCorrectionRate =
+// selfCorrections / totalErrors is structurally capped low for any skilled reader — it's 0 both
+// in the worst case (errors, none caught) AND the best case (zero errors, nothing to catch). That
+// makes it win the "weakest" comparison almost by construction, regardless of real improvement,
+// since it's not on a comparable scale to the other four. Still stored in the vector for trend
+// tracking (e.g. Progress page) — just not used to decide what the reader's core weakness is.
+const COMPARABLE_DIMENSIONS = 4 // indices 0-3; index 4 (selfCorrectionRate) excluded
+
+function weakestComparableIndex(skillVector: number[]): number {
+  const comparable = skillVector.slice(0, COMPARABLE_DIMENSIONS)
+  return comparable.indexOf(Math.min(...comparable))
+}
+
+// Only complexityHandling/registerHandling map to a real PassageMap axis (X/Y). The other two
+// comparable dimensions (wcpm, pause placement) have no axis to move along, so a weakness there
+// leaves the target unchanged — Claude's existing per-session exercises address it instead.
 // Escalation (moving further into the weak axis) only happens when the session recommendation
 // was "advance" — on retry, more reps at the same difficulty beats piling on a harder version of
 // what the reader is already struggling with.
@@ -23,7 +37,7 @@ export function computeNextTarget(
   currentComplexity: number,
   currentRegister: number
 ): PassageTarget {
-  const weakestIndex = skillVector.indexOf(Math.min(...skillVector))
+  const weakestIndex = weakestComparableIndex(skillVector)
   const isMapAxisWeakness = weakestIndex === 0 || weakestIndex === 1
   const shouldEscalate = recommendation === 'advance'
 
@@ -38,7 +52,7 @@ export function computeNextTarget(
 }
 
 export function weakestDimensionLabel(skillVector: number[]): string {
-  return SKILL_DIMENSIONS[skillVector.indexOf(Math.min(...skillVector))]
+  return SKILL_DIMENSIONS[weakestComparableIndex(skillVector)]
 }
 
 const INDEX_NAME = 'idx:passages'

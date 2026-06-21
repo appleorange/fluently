@@ -101,8 +101,10 @@ export default function PassageMap({
           <text x={6} y={SIZE / 2 - 4} fontSize={10} fill="#94a3b8" textAnchor="start" style={{ pointerEvents: 'none', userSelect: 'none' }}>Easy</text>
           <text x={SIZE - 6} y={SIZE / 2 - 4} fontSize={10} fill="#94a3b8" textAnchor="end" style={{ pointerEvents: 'none', userSelect: 'none' }}>Difficult</text>
 
-          {/* Recommended next position — arrow from current pin, drawn before the pin so the pin sits on top */}
-          {showArrow && recommended && (
+          {/* Recommended next position — dot always shows when a recommendation exists (even if
+              it's the same spot as the current pin — that's a valid "stay here" outcome); the
+              arrow only draws when there's an actual meaningful distance to point across. */}
+          {recommended && showArrow && (
             <>
               <defs>
                 <marker id="rec-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
@@ -128,6 +130,16 @@ export default function PassageMap({
             strokeWidth={2.5}
             style={{ filter: 'drop-shadow(0 2px 6px rgba(249,115,22,0.45))', pointerEvents: 'none' }}
           />
+
+          {/* Recommendation is the same spot as current — show as a blue halo ring around the
+              orange pin instead of a coincident dot that would just be hidden underneath it */}
+          {recommended && !showArrow && (
+            <circle
+              cx={pos.x} cy={pos.y} r={POINT_R + 4}
+              fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="3 3"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
 
           {/* Generating overlay */}
           {isGenerating && (

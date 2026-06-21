@@ -92,4 +92,5 @@ export interface NextPassageRecommendation {
   target: { complexity: number; register: number }
   recommended: RecommendedPassage | null
   weakestDimension: string
+  targetMoved: boolean  // false when the weakest dimension has no PassageMap axis (position unchanged)
 }

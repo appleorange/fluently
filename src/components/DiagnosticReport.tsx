@@ -80,14 +80,16 @@ function registerLabel(r: number): string {
 }
 
 function NextPassageCard({ nextPassage, onAccept }: { nextPassage: NextPassageRecommendation; onAccept: () => void }) {
-  const { target, recommended } = nextPassage
+  const { target, recommended, targetMoved, weakestDimension } = nextPassage
   if (!recommended) return null
   return (
     <div className="mb-5 bg-blue-50 border border-blue-200 rounded-xl p-4">
       <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Your next passage</h3>
       <p className="text-sm font-semibold text-slate-800 mb-1">{recommended.title}</p>
       <p className="text-xs text-slate-500 mb-3">
-        {complexityLabel(target.complexity)}, {registerLabel(target.register)} — targets your weakest area this session ({nextPassage.weakestDimension})
+        {targetMoved
+          ? `${complexityLabel(target.complexity)}, ${registerLabel(target.register)} — targets your weakest area this session (${weakestDimension})`
+          : `same difficulty as today — your growth area this session (${weakestDimension}) doesn't map to complexity or register, so the exercises above target it directly instead`}
       </p>
       <button
         onClick={onAccept}

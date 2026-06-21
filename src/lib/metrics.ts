@@ -58,14 +58,22 @@ async function analyzePausePlacement(
   }
 }
 
+// A self-correction (wrong word immediately followed by the reader re-saying it correctly) is
+// classified by the Levenshtein alignment as an 'insertion' (the wrong attempt — it matches no
+// expected word) followed by 'correct' (the real word, now in its rightful position) — NOT as
+// 'substitution' followed by 'correct'. Substituting then re-matching the same expected word would
+// cost more edits than treating the wrong attempt as a throwaway insertion, so the optimal
+// alignment never produces that pattern. Also keep the substitution+matching-expected check as a
+// fallback for the rare case where the passage itself repeats a word consecutively.
 function detectSelfCorrections(aligned: AlignedWord[]): number {
   let count = 0
   for (let i = 0; i < aligned.length - 1; i++) {
-    if (
+    const isInsertionThenCorrect = aligned[i].status === 'insertion' && aligned[i + 1].status === 'correct'
+    const isSubstitutionThenRematch =
       aligned[i].status === 'substitution' &&
       aligned[i + 1].status === 'correct' &&
       aligned[i + 1].expected === aligned[i].expected
-    ) {
+    if (isInsertionThenCorrect || isSubstitutionThenRematch) {
       count++
     }
   }

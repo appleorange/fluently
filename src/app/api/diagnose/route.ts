@@ -248,11 +248,13 @@ export async function POST(request: Request) {
       target: { complexity: number; register: number }
       recommended: (StoredPassage & { matchSource: 'existing' | 'generated' }) | null
       weakestDimension: string
+      targetMoved: boolean
     } | null = null
 
     if (skillVector && complexity !== undefined && register !== undefined) {
       const target = computeNextTarget(skillVector, tierRecommendation, complexity, register)
       const weakest = weakestDimensionLabel(skillVector)
+      const targetMoved = Math.abs(target.complexity - complexity) > 0.01 || Math.abs(target.register - register) > 0.01
 
       let existing = await findNearestPassage(target)
       if (existing && existing.passageId === passageId) existing = null // don't recommend the passage just read
@@ -269,11 +271,11 @@ export async function POST(request: Request) {
         }
       }
 
-      nextPassage = { target, recommended, weakestDimension: weakest }
+      nextPassage = { target, recommended, weakestDimension: weakest, targetMoved }
       nextPassageBlurb = `
 
 NEXT PASSAGE RECOMMENDATION:
-- This reader's weakest dimension this session: ${weakest}
+- This reader's weakest dimension this session: ${weakest}${targetMoved ? '' : ' (no PassageMap axis for this — stays at the same difficulty; address via the exercises above, not passage placement)'}
 - Optimal next passage target: ${complexityContext(target.complexity)}, ${registerContext(target.register)}${recommended ? `\n- Recommended passage: "${recommended.title}"` : ''}
 - Briefly reference this in your reasoning — why this next target follows from today's pattern.`
     }
