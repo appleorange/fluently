@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, type ReactNode } from 'react'
+import LoadingDots from '@/components/LoadingDots'
 
 const READER_ID_KEY = 'fluently-reader-id'
 
@@ -172,17 +173,8 @@ function SessionsAndProgress() {
 
   if (allSessions === null) {
     return (
-      <div className="grid grid-cols-2 gap-6">
-        {[0, 1].map(i => (
-          <div key={i} className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-48 animate-pulse">
-            <div className="h-4 bg-slate-100 rounded w-1/3 mb-4" />
-            <div className="space-y-3">
-              <div className="h-3 bg-slate-100 rounded" />
-              <div className="h-3 bg-slate-100 rounded w-4/5" />
-              <div className="h-3 bg-slate-100 rounded w-3/4" />
-            </div>
-          </div>
-        ))}
+      <div className="flex justify-center py-12">
+        <LoadingDots />
       </div>
     )
   }

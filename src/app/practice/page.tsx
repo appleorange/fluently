@@ -8,6 +8,7 @@ import PassageDisplay from '@/components/PassageDisplay'
 import DiagnosticReport, { ReadingHistory } from '@/components/DiagnosticReport'
 import MetricsDashboard from '@/components/MetricsDashboard'
 import PassageMap from '@/components/PassageMap'
+import LoadingDots from '@/components/LoadingDots'
 
 const SESSION_DURATION = 60
 
@@ -385,19 +386,10 @@ export default function PracticePage() {
           </div>
         )}
 
-        {/* Passage skeleton while generating */}
+        {/* Passage loading while generating */}
         {sessionState === 'idle' && isGenerating && (
-          <div className="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-            <div className="h-3 bg-slate-100 rounded-full w-1/4 mb-5 animate-pulse" />
-            <div className="space-y-2.5">
-              {[1, 0.95, 0.88, 1, 0.72, 0.9, 0.6].map((w, i) => (
-                <div
-                  key={i}
-                  className="h-2.5 bg-slate-100 rounded-full animate-pulse"
-                  style={{ width: `${w * 100}%`, animationDelay: `${i * 0.07}s` }}
-                />
-              ))}
-            </div>
+          <div className="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex justify-center">
+            <LoadingDots />
           </div>
         )}
 
@@ -439,10 +431,7 @@ export default function PracticePage() {
                           </svg>
                         </div>
                       ) : active ? (
-                        <svg className="animate-spin w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                        </svg>
+                        <LoadingDots small />
                       ) : (
                         <div className="w-5 h-5 rounded-full border-2 border-slate-200" />
                       )}
