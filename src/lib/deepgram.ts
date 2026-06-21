@@ -19,7 +19,7 @@ export async function startDeepgramSession(
   }
 
   const params = new URLSearchParams({
-    model: 'nova-2',
+    model: 'nova-3',
     punctuate: 'false',
     interim_results: 'false',
     language: 'en-US'

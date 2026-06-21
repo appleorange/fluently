@@ -131,8 +131,11 @@ Goal: reliable, beautiful demo for judges
 - [ ] **Verification:** do two reads of the same passage, confirm second report references the first attempt's metrics
 
 ### Deepgram depth
-- [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
-- [ ] Enable disfluency detection in Deepgram params — detect verbal hesitations ("um", "uh", repetitions) as a second hesitation signal alongside timestamp gap detection. Pass disfluency count separately in the metrics object so Claude can distinguish verbal vs silent hesitations
+- [x] Switched streaming model from `nova-2` to `nova-3` in `src/lib/deepgram.ts` for better transcription accuracy
+- [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise (implemented in `alignment.ts`, pending live browser verification)
+
+### Disfluency detection — dropped
+Explored using Deepgram's `filler_words` param to distinguish verbal hesitations ("um"/"uh") from silent pauses. Dropped for two reasons: (1) `filler_words` is only supported in **streaming** mode for the base `Nova` model and `Flux` — confirmed via docs and a live test that `nova-3` + `filler_words: true` returns zero filler tokens; (2) more fundamentally, filler words are a feature of spontaneous speech (stalling while generating novel content), not oral reading aloud (the words are already on the page — a struggling reader decodes or pauses, doesn't search for words). `ErrorCounts.hesitations` stays a single gap-based count.
 
 ### Self-correction as first-class signal
 - [ ] Update `src/lib/metrics.ts` — compute self-correction rate as its own top-level metric: `selfCorrections: number`, `totalErrors: number`, `selfCorrectionRate: number` (0–1). Currently buried in the error log; needs to be a named field Claude explicitly receives
@@ -142,18 +145,19 @@ Goal: reliable, beautiful demo for judges
 - [ ] **Verification:** simulate a session with 3 self-corrections, confirm Claude report leads with explicit praise for self-corrections before addressing remaining errors
 
 ### Longitudinal error tracking (diagnostic arc)
-- [ ] Extend Redis schema to store per-session error log: `{type, word, syntacticContext, passageId, timestamp}` per error instance, keyed by a persistent `readerId` (simple UUID stored in localStorage)
-- [ ] After 3+ sessions, change the Claude diagnostic prompt from snapshot mode to longitudinal mode — pass the aggregated error history and ask Claude to identify which error types are persisting, worsening, or resolving across sessions
-- [ ] Structured longitudinal input to Claude:
+- [ ] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage on first visit in `page.tsx`
+- [ ] After each session store error log in Redis under key `reader:{readerId}:sessions` as append-only list, TTL 30 days. Each entry: `{sessionId, passageId, passageGrade, wcpm, accuracy, errorCounts, selfCorrectionRate, timestamp}`
+- [ ] On each new session fetch full history for this `readerId` before calling Claude. Pass session count to diagnose route
+- [ ] If `sessionCount < 3`: use existing snapshot prompt ("here is what happened today")
+- [ ] If `sessionCount >= 3`: switch to longitudinal prompt — pass aggregated error history and instruct Claude to identify which error types are persisting, worsening, or resolving. Example structured input to Claude:
   ```
   Session 1: 6 function word omissions, 2 at clause boundary
   Session 2: 4 function word omissions, 3 at clause boundary
   Session 3: 8 function word omissions, 5 at clause boundary
-  Pattern: increasing rate, concentrated at clause boundaries → prosodic chunking issue
+  Pattern: increasing rate at clause boundaries → prosodic chunking issue not attention
   ```
-- [ ] Update `DiagnosticReport.tsx` — after 3+ sessions show a "Reading history" section above the current report with a simple timeline of WCPM and accuracy across sessions
-- [ ] Update `project_spec.md` to document the `readerId` localStorage key and Redis schema for longitudinal data
-- [ ] **Verification:** simulate 3 sessions manually, confirm Claude report shifts from snapshot language to pattern language
+- [ ] Update `DiagnosticReport.tsx` — after 3+ sessions show a "Reading history" section above the current report with a simple timeline of WCPM and accuracy across sessions with trend arrows
+- [ ] **Verification:** simulate 3 sessions manually by seeding Redis directly, confirm Claude report language shifts from snapshot to pattern recognition on the 3rd session
 
 ---
 
