@@ -95,6 +95,8 @@ export async function computeMetrics(
 
   const pausePlacement = await analyzePausePlacement(timestamps, passageText)
   const selfCorrections = detectSelfCorrections(aligned)
+  const totalErrors = errorCounts.substitutions + errorCounts.omissions + errorCounts.insertions
+  const selfCorrectionRate = totalErrors > 0 ? selfCorrections / totalErrors : 0
   const accuracy = totalExpected > 0 ? Math.round((correctWords / totalExpected) * 100) : 0
 
   return {
@@ -105,6 +107,8 @@ export async function computeMetrics(
     errorCounts,
     pausePlacement,
     selfCorrections,
+    totalErrors,
+    selfCorrectionRate,
     accuracy
   }
 }

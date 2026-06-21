@@ -159,5 +159,7 @@ export const MOCK_METRICS: Metrics = {
     boundaryPercent: 80,
   },
   selfCorrections: 0,
+  totalErrors: 4,
+  selfCorrectionRate: 0,
   accuracy: 85.7,
 }

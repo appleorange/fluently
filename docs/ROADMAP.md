@@ -113,8 +113,11 @@ User drags a red-orange pin anywhere on the dotted canvas. On release, Claude ge
 ## Phase 6 — Polish & Demo Prep
 Goal: reliable, beautiful demo for judges
 
-- [ ] Self-correction detection (error followed immediately by correct word)
-- [ ] Loading states, error handling, edge cases
+- [x] Self-correction detection (error followed immediately by correct word) — `detectSelfCorrections` in `metrics.ts`
+- [x] Loading states, error handling, edge cases (page.tsx)
+  - [x] Diagnose API errors now surface to the user — `handleSessionEnd` checks `!res.ok || data.error` and throws into the existing catch instead of silently rendering a broken/empty report on Claude failures
+  - [x] Fixed stuck-session bug: stopping (manually or via the 60s auto-timeout) with zero words recorded previously left the timer running and mic open forever with no feedback; now stops cleanly and shows "No speech detected. Please try again."
+  - [x] Stale error banner now clears when a new recording starts
 - [ ] Mobile-responsive layout
 - [ ] Demo rehearsal: 60-second reading → full report flow under 90 seconds total
 - [ ] Identify best demo passage (something with interesting errors likely — medium complexity, formal register)
@@ -274,16 +277,18 @@ Passage vectors seeded once at startup, stored as:
 
 ### Deepgram depth
 - [x] Switched streaming model from `nova-2` to `nova-3` in `src/lib/deepgram.ts` for better transcription accuracy
-- [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise (implemented in `alignment.ts`, pending live browser verification)
+- [x] Capture confidence scores from Deepgram word objects — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
+  - [x] Implemented in `alignment.ts` for both the substitution branch and both insertion branches (originally only substitutions were covered — a live test surfaced a confidence-0.21 insertion still counting as a real error; fixed via a shared `isLowConfidence()` helper)
+  - [x] **Verified live** (2026-06-20): read a real passage, inspected raw aligned output. Low-confidence substitutions (0.41–0.57) correctly downgraded to `uncertain`; high-confidence substitutions (0.89–0.99) correctly stayed `substitution`; confirmed fix against the exact low-confidence insertion case found live
 
 ### Disfluency detection — dropped
 Explored using Deepgram's `filler_words` param to distinguish verbal hesitations ("um"/"uh") from silent pauses. Dropped for two reasons: (1) `filler_words` is only supported in **streaming** mode for the base `Nova` model and `Flux` — confirmed via docs and a live test that `nova-3` + `filler_words: true` returns zero filler tokens; (2) more fundamentally, filler words are a feature of spontaneous speech (stalling while generating novel content), not oral reading aloud (the words are already on the page — a struggling reader decodes or pauses, doesn't search for words). `ErrorCounts.hesitations` stays a single gap-based count.
 
 ### Self-correction as first-class signal
-- [ ] Update `src/lib/metrics.ts` — compute self-correction rate as its own top-level metric: `selfCorrections: number`, `totalErrors: number`, `selfCorrectionRate: number` (0–1). Currently buried in the error log; needs to be a named field Claude explicitly receives
-- [ ] Update `src/lib/types.ts` — add `selfCorrectionRate: number` to the `Metrics` interface
-- [ ] Update `src/app/api/diagnose/route.ts` — add self-correction to the Claude prompt as a distinct positive signal, not part of the error section. Prompt should instruct Claude: if `selfCorrectionRate > 0`, explicitly praise it before addressing errors (e.g. "You caught and fixed 4 of your 6 errors — that metacognitive monitoring is a real strength."). If `selfCorrectionRate` is 0 and error count is high, note the absence as a signal worth working on
-- [ ] Update `DiagnosticReport.tsx` — show self-corrections as a separate stat card with positive visual treatment (green, upward arrow icon), distinct from error metrics (red/yellow). Never group it with errors visually
+- [x] Update `src/lib/metrics.ts` — compute self-correction rate as its own top-level metric: `selfCorrections: number`, `totalErrors: number`, `selfCorrectionRate: number` (0–1). Currently buried in the error log; needs to be a named field Claude explicitly receives
+- [x] Update `src/lib/types.ts` — add `selfCorrectionRate: number` to the `Metrics` interface
+- [x] Update `src/app/api/diagnose/route.ts` — add self-correction to the Claude prompt as a distinct positive signal, not part of the error section. Prompt instructs Claude: if self-correction rate ≥ 20%, explicitly praise it before addressing errors
+- [x] Update `DiagnosticReport.tsx` — show self-corrections as a separate stat card with positive visual treatment (green, upward arrow icon), distinct from error metrics (red/yellow). Never group it with errors visually. Verified in browser (2026-06-20): card renders "N self-corrections / X% of errors caught and fixed" when selfCorrections > 0, and is absent entirely at 0
 - [ ] **Verification:** simulate a session with 3 self-corrections, confirm Claude report leads with explicit praise for self-corrections before addressing remaining errors
 
 ### Longitudinal error tracking (diagnostic arc)

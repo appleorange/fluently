@@ -132,8 +132,15 @@ export default function Home() {
 
   const handleSessionEnd = useCallback(async () => {
     const currentPassage = passageRef.current
-    if (!currentPassage || wordStream.length === 0) return
+    if (!currentPassage) return
     stopTimer()
+
+    if (wordStream.length === 0) {
+      setSessionState('idle')
+      setError('No speech detected. Please try again.')
+      return
+    }
+
     setSessionState('processing')
 
     try {
@@ -159,6 +166,7 @@ export default function Home() {
         })
       })
       const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Failed to generate report')
       setReport(data.report)
       setRecommendation(data.recommendation ?? 'retry')
       setReasoning(data.reasoning ?? '')
@@ -170,6 +178,7 @@ export default function Home() {
   }, [wordStream, stopTimer])
 
   const startRecording = useCallback(() => {
+    setError('')
     setTimerSeconds(0)
     setWordStream([])
     setAligned([])
@@ -314,6 +323,8 @@ export default function Home() {
             errorType={getErrorType(metrics)}
             recommendation={recommendation}
             reasoning={reasoning}
+            selfCorrections={metrics.selfCorrections}
+            selfCorrectionRate={metrics.selfCorrectionRate}
             onAdvance={handleAdvance}
             onRetry={handleRetry}
           />

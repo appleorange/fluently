@@ -39,6 +39,8 @@ export interface Metrics {
   errorCounts: ErrorCounts
   pausePlacement: PausePlacement
   selfCorrections: number
+  totalErrors: number          // substitutions + omissions + insertions (denominator for selfCorrectionRate)
+  selfCorrectionRate: number   // 0-1, selfCorrections / totalErrors (0 if no errors)
   accuracy: number        // 0-100 percentage
 }
 

@@ -86,9 +86,8 @@ function buildPrompt(
   complexity?: number,
   register?: number
 ): string {
-  const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections } = metrics
-  const totalErrors = errorCounts.substitutions + errorCounts.omissions + errorCounts.insertions
-  const scRate = totalErrors > 0 ? Math.round((selfCorrections / totalErrors) * 100) : 0
+  const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections, totalErrors, selfCorrectionRate } = metrics
+  const scRate = Math.round(selfCorrectionRate * 100)
 
   const passageContext = (complexity !== undefined && register !== undefined)
     ? `- Passage complexity: ${complexityContext(complexity)}

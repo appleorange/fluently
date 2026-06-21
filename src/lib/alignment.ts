@@ -4,6 +4,10 @@ function normalize(word: string): string {
   return word.toLowerCase().replace(/[^a-z0-9']/g, '')
 }
 
+function isLowConfidence(ts: WordTimestamp | undefined): boolean {
+  return ts !== undefined && ts.confidence < 0.7
+}
+
 export function align(
   expected: string[],
   got: string[],
@@ -48,12 +52,13 @@ export function align(
       i--; j--
     } else if (i === 0) {
       // No expected words left — everything remaining in got is an insertion
+      const ts = timestamps[j - 1]
       aligned.unshift({
         expected: '',
         got: got[j - 1],
-        status: 'insertion',
+        status: isLowConfidence(ts) ? 'uncertain' : 'insertion',
         index: 0,
-        timestamp: timestamps[j - 1]
+        timestamp: ts
       })
       j--
     } else if (j === 0) {
@@ -74,11 +79,10 @@ export function align(
 
       if (sub === minCost) {
         const ts = timestamps[j - 1]
-        const lowConfidence = ts !== undefined && ts.confidence < 0.7
         aligned.unshift({
           expected: expected[i - 1],
           got: got[j - 1],
-          status: lowConfidence ? 'uncertain' : 'substitution',
+          status: isLowConfidence(ts) ? 'uncertain' : 'substitution',
           index: i - 1,
           timestamp: ts
         })
@@ -92,12 +96,13 @@ export function align(
         })
         i--
       } else {
+        const ts = timestamps[j - 1]
         aligned.unshift({
           expected: '',
           got: got[j - 1],
-          status: 'insertion',
+          status: isLowConfidence(ts) ? 'uncertain' : 'insertion',
           index: i,
-          timestamp: timestamps[j - 1]
+          timestamp: ts
         })
         j--
       }
