@@ -8,6 +8,7 @@ interface PassageMapProps {
   initialComplexity?: number
   initialRegister?: number
   recommendedPosition?: { complexity: number; register: number } | null
+  readOnly?: boolean
 }
 
 const SIZE = 360
@@ -20,7 +21,8 @@ export default function PassageMap({
   isGenerating,
   initialComplexity = 0.5,
   initialRegister = 0.5,
-  recommendedPosition = null
+  recommendedPosition = null,
+  readOnly = false
 }: PassageMapProps) {
   const [pos, setPos] = useState({
     x: initialComplexity * SIZE,
@@ -82,10 +84,10 @@ export default function PassageMap({
           width={SIZE}
           height={SIZE}
           className="rounded-xl border border-slate-200 bg-white touch-none"
-          style={{ cursor: isGenerating ? 'wait' : 'crosshair' }}
-          onPointerDown={isGenerating ? undefined : handlePointerDown}
-          onPointerMove={isGenerating ? undefined : handlePointerMove}
-          onPointerUp={isGenerating ? undefined : handlePointerUp}
+          style={{ cursor: isGenerating ? 'wait' : readOnly ? 'default' : 'crosshair' }}
+          onPointerDown={isGenerating || readOnly ? undefined : handlePointerDown}
+          onPointerMove={isGenerating || readOnly ? undefined : handlePointerMove}
+          onPointerUp={isGenerating || readOnly ? undefined : handlePointerUp}
         >
           {dots}
 

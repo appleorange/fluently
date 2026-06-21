@@ -440,6 +440,24 @@ export default function PracticePage() {
                 onAcceptRecommendation={handleAcceptRecommendation}
               />
             )}
+
+            {nextPassage?.recommended && passage?.complexity !== undefined && passage?.register !== undefined && (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mt-6">
+                <h2 className="font-semibold text-slate-800 mb-1">Where this fits on the map</h2>
+                <p className="text-xs text-slate-400 mb-4">
+                  Orange is where you just read; blue is the recommended next position.
+                </p>
+                <PassageMap
+                  key={passage.passageId}
+                  onGenerate={() => {}}
+                  isGenerating={false}
+                  initialComplexity={passage.complexity}
+                  initialRegister={passage.register}
+                  recommendedPosition={nextPassage.target}
+                  readOnly
+                />
+              </div>
+            )}
           </>
         )}
       </div>
