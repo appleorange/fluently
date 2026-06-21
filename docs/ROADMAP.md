@@ -173,8 +173,91 @@ Core concept: Redis vector search finds the optimal next passage across both com
 
 #### Agent memory
 - [ ] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage
-- [ ] Store each session's error profile vector + metrics in Redis under `reader:{readerId}:sessions` append-only, TTL 30 days
+- [ ] Store each session's error profile vector + metrics in Redis — exact schema below
 - [ ] On each new session fetch full history — if `sessionCount >= 3` switch Claude to longitudinal prompt mode
+
+**Exact Redis storage schema:**
+
+Two data structures per reader:
+
+`reader:{readerId}:sessions:{sessionId}` — full JSON document, one per session:
+```json
+{
+  "sessionId": "uuid",
+  "readerId": "uuid",
+  "timestamp": 1718900000,
+  "passageId": "grade4-formal",
+  "passageGrade": 4,
+  "passageComplexity": 0.6,
+  "passageRegister": 0.8,
+  "metrics": {
+    "wcpm": 94,
+    "accuracy": 91,
+    "durationSeconds": 58,
+    "correctWords": 87,
+    "totalWords": 96
+  },
+  "errorCounts": {
+    "substitutions": 4,
+    "omissions": 3,
+    "insertions": 1,
+    "hesitations": 7
+  },
+  "errorDetail": [
+    {
+      "type": "substitution",
+      "expected": "observed",
+      "got": "saw",
+      "posExpected": "verb",
+      "posGot": "verb",
+      "semanticClass": "same",
+      "syntacticContext": "clause-boundary"
+    },
+    {
+      "type": "omission",
+      "expected": "the",
+      "got": null,
+      "posExpected": "determiner",
+      "syntacticContext": "mid-phrase"
+    }
+  ],
+  "pausePlacement": {
+    "totalPauses": 11,
+    "atBoundary": 4,
+    "midPhrase": 7,
+    "boundaryPercent": 36
+  },
+  "selfCorrections": 2,
+  "selfCorrectionRate": 0.22,
+  "skillVector": [0.71, 0.38, 0.62, 0.36, 0.22]
+}
+```
+
+`reader:{readerId}:sessionIndex` — lightweight ordered list of sessionIds in chronological order for efficient history retrieval without key scanning
+
+`skillVector` is a 5-dimensional float array, always in this order:
+```
+[
+  complexityHandling,   // 1 - (error rate on polysyllabic words)
+  registerHandling,     // 1 - (function word error rate)
+  wcpmPercentile,       // wcpm / grade benchmark capped at 1.0
+  pausePlacementScore,  // boundaryPercent / 100
+  selfCorrectionRate    // selfCorrections / totalErrors, 0 if no errors
+]
+```
+
+Passage vectors seeded once at startup, stored as:
+
+`passage:{passageId}` →
+```json
+{
+  "passageId": "grade4-formal",
+  "title": "The Observatory",
+  "complexity": 0.6,
+  "register": 0.8,
+  "vector": [0.6, 0.8, 0.71, 0.82, 0.34]
+}
+```
 
 #### UI updates
 - [ ] After `DiagnosticReport` renders, show "Your next passage" card: title, complexity/register position on a mini 2D grid, and one sentence from Claude explaining why this passage was chosen
