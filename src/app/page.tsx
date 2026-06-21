@@ -312,18 +312,33 @@ function SessionsAndProgress() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const [learnMoreOpen, setLearnMoreOpen] = useState(false)
+
   return (
     <main className="min-h-screen bg-white">
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 pt-16 pb-12">
-        <div className="grid grid-cols-2 gap-12 items-center">
+        <div className="grid grid-cols-2 gap-12 items-start">
           <div>
             <h1 className="text-5xl font-bold text-slate-900 leading-tight">
               Read with clarity.<br />Speak with confidence.
             </h1>
             <p className="text-slate-500 mt-5 text-lg leading-relaxed">
-              Fluently helps you build stronger oral reading fluency through engaging passages, instant feedback, and personalized insights.
+              Every reader has a pattern. With every passage, Fluently finds yours.
             </p>
+
+            {/* Expandable detail */}
+            <div
+              className={`overflow-hidden transition-all duration-500 ease-in-out ${learnMoreOpen ? 'max-h-96 opacity-100 mt-5' : 'max-h-0 opacity-0 mt-0'}`}
+            >
+              <p className="text-slate-500 text-base leading-relaxed mb-4">
+                Fluently transcribes your reading in real time using Deepgram and Redis, aligns it to the target passage with Levenshtein sequence alignment, and classifies every deviation, such as substitutions, omissions, hesitations, against the syntactic structure of the text by utilizing pattern recognition.
+              </p>
+              <p className="text-slate-500 text-base leading-relaxed">
+                The result is a diagnostic report that goes beyond words per minute telling you what kind of errors are occurring, whether they&apos;re consistent, and what they indicate about the reader&apos;s underlying process. Designed for ESL learners and those in speech or reading therapy, Fluently brings the same analysis a specialist would generate from a scored passage to anyone, for free.
+              </p>
+            </div>
+
             <div className="flex gap-3 mt-8">
               <Link
                 href="/practice"
@@ -331,8 +346,11 @@ export default function HomePage() {
               >
                 Start Reading
               </Link>
-              <button className="px-6 py-3 text-slate-700 hover:text-slate-900 font-semibold rounded-xl text-sm border border-slate-200 hover:border-slate-300 transition-colors">
-                Learn More
+              <button
+                onClick={() => setLearnMoreOpen(o => !o)}
+                className="px-6 py-3 text-slate-700 hover:text-slate-900 font-semibold rounded-xl text-sm border border-slate-200 hover:border-slate-300 transition-colors"
+              >
+                {learnMoreOpen ? 'Minimize' : 'Learn More'}
               </button>
             </div>
           </div>
