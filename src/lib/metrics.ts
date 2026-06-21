@@ -78,7 +78,12 @@ export async function computeMetrics(
   passageText: string
 ): Promise<Metrics> {
   const correctWords = aligned.filter(w => w.status === 'correct').length
-  const totalExpected = aligned.filter(w => w.status !== 'insertion').length
+  // Uncertain words (low-confidence transcription, not a confirmed error) are excluded from the
+  // accuracy denominator too — otherwise they'd silently penalize accuracy despite not counting
+  // toward any error type. Accent fairness: a word shouldn't cost accuracy just because Deepgram
+  // was unsure how to transcribe it.
+  const totalExpected = aligned.filter(w => w.status !== 'insertion' && w.status !== 'uncertain').length
+  const uncertainCount = aligned.filter(w => w.status === 'uncertain').length
 
   const durationSeconds = timestamps.length >= 2
     ? (timestamps[timestamps.length - 1].start + timestamps[timestamps.length - 1].duration) - timestamps[0].start
@@ -109,6 +114,7 @@ export async function computeMetrics(
     selfCorrections,
     totalErrors,
     selfCorrectionRate,
-    accuracy
+    accuracy,
+    uncertainCount
   }
 }

@@ -162,4 +162,5 @@ export const MOCK_METRICS: Metrics = {
   totalErrors: 4,
   selfCorrectionRate: 0,
   accuracy: 85.7,
+  uncertainCount: 0,
 }

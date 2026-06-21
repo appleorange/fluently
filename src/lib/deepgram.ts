@@ -22,7 +22,7 @@ export async function startDeepgramSession(
     model: 'nova-3',
     punctuate: 'false',
     interim_results: 'false',
-    language: 'en-US'
+    language: 'en' // accent-agnostic English, not en-US-optimized — accent fairness
   })
 
   const ws = new WebSocket(

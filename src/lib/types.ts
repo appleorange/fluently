@@ -42,6 +42,7 @@ export interface Metrics {
   totalErrors: number          // substitutions + omissions + insertions (denominator for selfCorrectionRate)
   selfCorrectionRate: number   // 0-1, selfCorrections / totalErrors (0 if no errors)
   accuracy: number        // 0-100 percentage
+  uncertainCount: number  // words flagged low-confidence instead of a definite error — accent fairness
 }
 
 export interface Passage {

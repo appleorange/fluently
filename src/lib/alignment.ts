@@ -5,7 +5,7 @@ function normalize(word: string): string {
 }
 
 function isLowConfidence(ts: WordTimestamp | undefined): boolean {
-  return ts !== undefined && ts.confidence < 0.7
+  return ts !== undefined && ts.confidence < 0.75
 }
 
 export function align(

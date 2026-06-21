@@ -156,7 +156,7 @@ function buildPrompt(
   complexity?: number,
   register?: number
 ): string {
-  const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections, totalErrors, selfCorrectionRate } = metrics
+  const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections, totalErrors, selfCorrectionRate, uncertainCount } = metrics
   const scRate = Math.round(selfCorrectionRate * 100)
 
   const passageContext = (complexity !== undefined && register !== undefined)
@@ -216,6 +216,8 @@ ERROR TAXONOMY:
 - Hesitations: ${errorCounts.hesitations} (pause > 500ms, not counted as errors)
 - Self-corrections: ${selfCorrections} of ${totalErrors} errors corrected (${scRate}% self-correction rate)
   → Self-corrections signal active metacognitive monitoring; ≥ 20% rate is a meaningful strength
+
+Note: ${uncertainCount} words were flagged as acoustically uncertain due to low transcription confidence — these are excluded from error totals and may reflect accent variation or background noise rather than reading errors. Do not reference these as errors in your report.
 
 PROSODIC FLUENCY (NAEP Oral Reading Fluency rubric proxy):
 - ${pausePlacement.boundaryPercent}% of pauses at syntactic phrase boundaries (${pausePlacement.atBoundary} of ${pausePlacement.totalPauses} pauses)

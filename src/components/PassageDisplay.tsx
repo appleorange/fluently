@@ -38,13 +38,20 @@ export default function PassageDisplay({ passage, wordStatuses }: PassageDisplay
       <p className="leading-loose text-base select-none">
         {passage.text.trim().split(/\s+/).map((word, i) => {
           const status = wordStatuses.get(i) ?? 'pending'
+          const isUncertain = status === 'uncertain'
           return (
-            <span key={i} className="inline">
+            <span key={i} className={isUncertain ? 'relative inline-block group' : 'inline'}>
               <span
                 className={`rounded px-0.5 transition-colors duration-150 ${getWordClass(status)}`}
+                title={isUncertain ? 'unclear audio' : undefined}
               >
                 {word}
               </span>
+              {isUncertain && (
+                <span className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                  unclear audio
+                </span>
+              )}
               {' '}
             </span>
           )

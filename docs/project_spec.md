@@ -125,6 +125,7 @@ fluently/
 6. Word normalization (lowercase, strip punctuation) applied to BOTH expected and got before alignment
 7. No state management library — React useState/useReducer only, no Redux/Zustand
 8. Error boundaries on AudioRecorder and PassageDisplay — mic failures must not crash the app
+9. Accent fairness: words with Deepgram confidence below 0.75 that are flagged as errors are classified as "uncertain" and excluded from all error metrics. Language parameter set to "en" not "en-US" for accent-agnostic recognition.
 
 ### Key Parameters Table
 | Parameter | Value | Reason |
