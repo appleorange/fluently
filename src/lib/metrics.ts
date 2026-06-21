@@ -2,17 +2,11 @@ import { AlignedWord, ErrorCounts, Metrics, PausePlacement, WordTimestamp } from
 
 const HESITATION_THRESHOLD_MS = 500
 
-function detectVerbalHesitations(timestamps: WordTimestamp[]): number {
-  return timestamps.filter(t => t.disfluency).length
-}
-
-// Pause >500ms not adjacent to a filler word — i.e. silence, not "um"/"uh" itself eating the gap
-function detectSilentHesitationIndices(timestamps: WordTimestamp[]): number[] {
+function detectHesitations(timestamps: WordTimestamp[]): number[] {
   const indices: number[] = []
   for (let i = 1; i < timestamps.length; i++) {
     const gap = (timestamps[i].start - (timestamps[i - 1].start + timestamps[i - 1].duration)) * 1000
-    const adjacentToFiller = timestamps[i].disfluency || timestamps[i - 1].disfluency
-    if (gap > HESITATION_THRESHOLD_MS && !adjacentToFiller) indices.push(i)
+    if (gap > HESITATION_THRESHOLD_MS) indices.push(i)
   }
   return indices
 }
@@ -42,7 +36,7 @@ async function analyzePausePlacement(
     boundaryWords.add(match[1].toLowerCase())
   }
 
-  const pauseIndices = detectSilentHesitationIndices(timestamps)
+  const pauseIndices = detectHesitations(timestamps)
   let atBoundary = 0
   let midPhrase = 0
 
@@ -96,8 +90,7 @@ export async function computeMetrics(
     substitutions: aligned.filter(w => w.status === 'substitution').length,
     omissions: aligned.filter(w => w.status === 'omission').length,
     insertions: aligned.filter(w => w.status === 'insertion').length,
-    verbalHesitations: detectVerbalHesitations(timestamps),
-    silentHesitations: detectSilentHesitationIndices(timestamps).length
+    hesitations: detectHesitations(timestamps).length
   }
 
   const pausePlacement = await analyzePausePlacement(timestamps, passageText)

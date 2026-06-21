@@ -55,8 +55,7 @@ export default function MetricsDashboard({ metrics, targetWCPM = 115 }: MetricsD
     errorCounts.substitutions,
     errorCounts.omissions,
     errorCounts.insertions,
-    errorCounts.verbalHesitations,
-    errorCounts.silentHesitations,
+    errorCounts.hesitations,
     1
   )
   const durationLabel = `${Math.floor(durationSeconds)}s`
@@ -94,8 +93,7 @@ export default function MetricsDashboard({ metrics, targetWCPM = 115 }: MetricsD
           <ErrorBar label="Substitutions" count={errorCounts.substitutions} maxCount={maxErrorCount} color="bg-red-400" />
           <ErrorBar label="Omissions"     count={errorCounts.omissions}     maxCount={maxErrorCount} color="bg-red-400" />
           <ErrorBar label="Insertions"    count={errorCounts.insertions}    maxCount={maxErrorCount} color="bg-red-400" />
-          <ErrorBar label="Verbal hesitations" count={errorCounts.verbalHesitations} maxCount={maxErrorCount} color="bg-red-400" />
-          <ErrorBar label="Silent hesitations" count={errorCounts.silentHesitations} maxCount={maxErrorCount} color="bg-red-400" />
+          <ErrorBar label="Hesitations"   count={errorCounts.hesitations}   maxCount={maxErrorCount} color="bg-red-400" />
         </div>
       </div>
 
@@ -152,8 +150,7 @@ export const MOCK_METRICS: Metrics = {
     substitutions: 3,
     omissions: 1,
     insertions: 0,
-    verbalHesitations: 1,
-    silentHesitations: 1,
+    hesitations: 2,
   },
   pausePlacement: {
     totalPauses: 5,

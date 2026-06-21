@@ -127,15 +127,11 @@ Goal: reliable, beautiful demo for judges
 - [ ] **Verification:** do two reads of the same passage, confirm second report references the first attempt's metrics
 
 ### Deepgram depth
-- [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
+- [x] Switched streaming model from `nova-2` to `nova-3` in `src/lib/deepgram.ts` for better transcription accuracy
+- [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise (implemented in `alignment.ts`, pending live browser verification)
 
-### Disfluency detection
-- [ ] Add `filler_words: true` to Deepgram streaming params in `src/lib/deepgram.ts` (verified via Deepgram docs: `disfluencies` is not a real param — `filler_words` is correct, supported on Nova, Nova-2, Nova-3 general models)
-- [ ] Update `WordTimestamp` type in `src/lib/types.ts` to include optional `disfluency?: boolean` field
-- [ ] Update `src/lib/metrics.ts` — capture disfluency markers from Deepgram word objects separately from timestamp-gap hesitations. Add `verbalHesitations: number` and `silentHesitations: number` as distinct fields in `ErrorCounts`, replacing the single `hesitations` count
-- [ ] Update `src/app/api/diagnose/route.ts` — pass both hesitation types to Claude separately. Prompt Claude to distinguish: verbal hesitations ("um", "uh", repetitions) suggest word retrieval difficulty, silent hesitations suggest decoding effort or phrasing breakdown
-- [ ] Update `DiagnosticReport.tsx` — show verbal vs silent hesitations as two separate metrics, not combined
-- [ ] **Verification:** read a passage with deliberate "um"s and silent pauses, confirm they are classified separately in the report
+### Disfluency detection — dropped
+Explored using Deepgram's `filler_words` param to distinguish verbal hesitations ("um"/"uh") from silent pauses. Dropped for two reasons: (1) `filler_words` is only supported in **streaming** mode for the base `Nova` model and `Flux` — confirmed via docs and a live test that `nova-3` + `filler_words: true` returns zero filler tokens; (2) more fundamentally, filler words are a feature of spontaneous speech (stalling while generating novel content), not oral reading aloud (the words are already on the page — a struggling reader decodes or pauses, doesn't search for words). `ErrorCounts.hesitations` stays a single gap-based count.
 
 ### Self-correction as first-class signal
 - [ ] Update `src/lib/metrics.ts` — compute self-correction rate as its own top-level metric: `selfCorrections: number`, `totalErrors: number`, `selfCorrectionRate: number` (0–1). Currently buried in the error log; needs to be a named field Claude explicitly receives
