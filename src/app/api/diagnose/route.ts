@@ -33,6 +33,7 @@ Rules for the report field:
 - Plain-language diagnostic for a parent or teacher, under 150 words
 - First sentence states the key finding
 - Distinguish DECODING issues (wrong words) from PHRASING FLUENCY issues (poor pausing)
+- Distinguish verbal hesitations (saying "um"/"uh") from silent hesitations (pausing with no filler word): verbal hesitations suggest word-retrieval difficulty, silent hesitations suggest decoding effort or phrasing breakdown
 - Give 1-2 specific actionable exercises
 - Warm and encouraging tone, not clinical
 - Refer to the reader as "the student" — never use character names from the passage
@@ -50,7 +51,8 @@ ASSESSMENT DATA:
 - WCPM: ${wcpm} → wcpmStatus: "${wcpmStatus}"
 - Accuracy: ${accuracy}% → accuracyStatus: "${accuracyStatus}"
 - Substitutions: ${errorCounts.substitutions}, Omissions: ${errorCounts.omissions}, Insertions: ${errorCounts.insertions}
-- Hesitations: ${errorCounts.hesitations} (pauses >500ms)
+- Verbal hesitations: ${errorCounts.verbalHesitations} ("um"/"uh"-type fillers — word-retrieval signal)
+- Silent hesitations: ${errorCounts.silentHesitations} (pauses >500ms with no filler word — decoding/phrasing signal)
 - Self-corrections: ${selfCorrections}
 - Pause placement: ${pausePlacement.boundaryPercent}% at natural phrase boundaries (below 50% = phrasing issue)`
 }
