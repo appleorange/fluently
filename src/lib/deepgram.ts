@@ -4,6 +4,9 @@ export interface DeepgramSession {
   stop: () => void
 }
 
+// Exact spellings Deepgram emits for filler_words — see https://developers.deepgram.com/docs/filler-words
+const FILLER_WORDS = new Set(['uh', 'um', 'mhmm', 'mm-mm', 'uh-uh', 'uh-huh', 'nuh-uh'])
+
 export async function startDeepgramSession(
   apiKey: string,
   onWord: (word: WordTimestamp) => void,
@@ -53,7 +56,8 @@ export async function startDeepgramSession(
           word: w.word,
           start: w.start,
           duration: w.end - w.start,
-          confidence: w.confidence
+          confidence: w.confidence,
+          disfluency: FILLER_WORDS.has(w.word.toLowerCase())
         })
       })
     } catch {
