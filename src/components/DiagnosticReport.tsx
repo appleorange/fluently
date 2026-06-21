@@ -41,7 +41,7 @@ function TrendArrow({ delta }: { delta: number }) {
   return <span className="text-slate-400">→</span>
 }
 
-function ReadingHistory({ history }: { history: HistoryPoint[] }) {
+export function ReadingHistory({ history }: { history: HistoryPoint[] }) {
   return (
     <div className="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Reading history</h3>
@@ -106,7 +106,6 @@ export default function DiagnosticReport({ report, errorType, recommendation, re
 
   return (
     <>
-    {history.length > 1 && <ReadingHistory history={history} />}
     <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
       <div className="flex items-start justify-between mb-5">
         <div>

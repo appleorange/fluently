@@ -306,7 +306,6 @@ Explored using Deepgram's `filler_words` param to distinguish verbal hesitations
 - [x] **Verified live** (2026-06-20): ran 5 real sessions in sequence. Confirmed snapshot → comparison → pattern-recognition mode switches correctly at each threshold, confirmed the session count and history table are accurate, and confirmed Claude's report correctly cited every number from a 5-session table with zero errors after the table-format fix. Also found and fixed a real race condition along the way: `page.tsx` was firing the session-log write before awaiting `diagnose`, so a fast Redis write could complete before `diagnose`'s history fetch ran, making a session see itself as its own prior. Fixed by reordering so `diagnose` always runs first.
 
 **Infra note**: switched from Redis Cloud to a local Homebrew-installed Redis instance (`REDIS_URL=redis://localhost:6379`) after the cloud instance showed repeated `ETIMEDOUT` errors (including one that silently dropped a real session write). Local Redis has been completely stable. Worth deciding before the demo whether to stay local (simpler, no internet dependency) or move back to cloud (more "real" for judges) — `redis.ts` now also has keep-alive + auto-reconnect-on-error handling either way.
-
 ---
 
 ## Session Log

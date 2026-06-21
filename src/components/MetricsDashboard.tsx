@@ -86,35 +86,36 @@ export default function MetricsDashboard({ metrics, targetWCPM = 115 }: MetricsD
         />
       </div>
 
-      {/* Error breakdown */}
-      <div className="mb-5">
-        <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-3">Error breakdown</h3>
-        <div className="space-y-2.5">
-          <ErrorBar label="Substitutions" count={errorCounts.substitutions} maxCount={maxErrorCount} color="bg-red-400" />
-          <ErrorBar label="Omissions"     count={errorCounts.omissions}     maxCount={maxErrorCount} color="bg-red-400" />
-          <ErrorBar label="Insertions"    count={errorCounts.insertions}    maxCount={maxErrorCount} color="bg-red-400" />
-          <ErrorBar label="Hesitations"   count={errorCounts.hesitations}   maxCount={maxErrorCount} color="bg-red-400" />
+      {/* Error breakdown + Pause placement side by side */}
+      <div className="grid grid-cols-2 gap-6">
+        <div>
+          <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-3">Error Breakdown</h3>
+          <div className="space-y-2.5">
+            <ErrorBar label="Substitutions" count={errorCounts.substitutions} maxCount={maxErrorCount} color="bg-red-400" />
+            <ErrorBar label="Omissions"     count={errorCounts.omissions}     maxCount={maxErrorCount} color="bg-red-400" />
+            <ErrorBar label="Insertions"    count={errorCounts.insertions}    maxCount={maxErrorCount} color="bg-red-400" />
+            <ErrorBar label="Hesitations"   count={errorCounts.hesitations}   maxCount={maxErrorCount} color="bg-red-400" />
+          </div>
         </div>
-      </div>
 
-      {/* Pause placement */}
-      <div>
-        <div className="flex justify-between items-baseline mb-1.5">
-          <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wide">Pause placement</h3>
-          <span className="text-sm font-semibold text-slate-700">
+        <div>
+          <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-3">Pause Placement</h3>
+          <p className="text-sm font-semibold text-slate-700 mb-2">
             {pausePlacement.boundaryPercent}% at phrase boundaries
-          </span>
+          </p>
+          <div className="bg-slate-100 rounded-full h-2.5">
+            <div
+              className={`h-2.5 rounded-full transition-all duration-300 ${boundaryColor(pausePlacement.boundaryPercent)}`}
+              style={{ width: `${pausePlacement.boundaryPercent}%` }}
+            />
+          </div>
+          <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+            {pausePlacement.atBoundary} of {pausePlacement.totalPauses} pauses at syntactic boundaries
+            {pausePlacement.midPhrase > 0 && (
+              <><br />+ {pausePlacement.midPhrase} mid-phrase pause{pausePlacement.midPhrase > 1 ? 's' : ''}</>
+            )}
+          </p>
         </div>
-        <div className="bg-slate-100 rounded-full h-2.5">
-          <div
-            className={`h-2.5 rounded-full transition-all duration-300 ${boundaryColor(pausePlacement.boundaryPercent)}`}
-            style={{ width: `${pausePlacement.boundaryPercent}%` }}
-          />
-        </div>
-        <p className="text-xs text-slate-400 mt-1.5">
-          {pausePlacement.atBoundary} of {pausePlacement.totalPauses} pauses at syntactic boundaries
-          {pausePlacement.midPhrase > 0 && ` · ${pausePlacement.midPhrase} mid-phrase pause${pausePlacement.midPhrase > 1 ? 's' : ''}`}
-        </p>
       </div>
     </div>
   )

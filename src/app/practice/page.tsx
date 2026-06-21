@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse, Recommendation, HistoryPoint, NextPassageRecommendation } from '@/lib/types'
 import AudioRecorder from '@/components/AudioRecorder'
 import PassageDisplay from '@/components/PassageDisplay'
-import DiagnosticReport from '@/components/DiagnosticReport'
+import DiagnosticReport, { ReadingHistory } from '@/components/DiagnosticReport'
 import MetricsDashboard from '@/components/MetricsDashboard'
 import PassageMap from '@/components/PassageMap'
 
@@ -53,7 +53,6 @@ export default function PracticePage() {
 
   useEffect(() => { passageRef.current = passage }, [passage])
 
-  // Persistent reader identity across sessions — first visit generates and stores it
   useEffect(() => {
     let id = localStorage.getItem(READER_ID_KEY)
     if (!id) {
@@ -106,10 +105,8 @@ export default function PracticePage() {
     setWordStream(prev => [...prev, word])
   }, [])
 
-  // Real-time alignment: runs after every new word during recording
   useEffect(() => {
     if (sessionState !== 'recording' || !passageRef.current || wordStream.length === 0) return
-
     const run = async () => {
       const { align } = await import('@/lib/alignment')
       const gotWords = wordStream.map(w => w.word)
@@ -123,12 +120,9 @@ export default function PracticePage() {
 
   const wordStatuses = useMemo(() => {
     const map = new Map<number, WordStatus>()
-
     aligned.forEach(w => {
       if (w.status !== 'insertion') map.set(w.index, w.status)
     })
-
-    // Hesitation overlay: gap > 500ms before a word, only overrides 'correct'
     for (let i = 1; i < wordStream.length; i++) {
       const gap = (wordStream[i].start - (wordStream[i - 1].start + wordStream[i - 1].duration)) * 1000
       if (gap > 500) {
@@ -138,8 +132,6 @@ export default function PracticePage() {
         }
       }
     }
-
-    // Uncertain overlay: low-confidence substitutions may be transcription noise
     const CONFIDENCE_THRESHOLD = 0.8
     aligned.forEach(w => {
       const status = map.get(w.index)
@@ -148,7 +140,6 @@ export default function PracticePage() {
         map.set(w.index, 'uncertain')
       }
     })
-
     return map
   }, [aligned, wordStream])
 
@@ -156,21 +147,17 @@ export default function PracticePage() {
     const currentPassage = passageRef.current
     if (!currentPassage) return
     stopTimer()
-
     if (wordStream.length === 0) {
       setSessionState('idle')
       setError('No speech detected. Please try again.')
       return
     }
-
     setSessionState('processing')
-
     try {
       const { align } = await import('@/lib/alignment')
       const gotWords = wordStream.map(w => w.word)
       const alignedWords = align(currentPassage.words, gotWords, wordStream)
       setAligned(alignedWords)
-
       const { computeMetrics } = await import('@/lib/metrics')
       const computedMetrics = await computeMetrics(alignedWords, wordStream, currentPassage.text)
       setMetrics(computedMetrics)
@@ -204,6 +191,7 @@ export default function PracticePage() {
           readerId: readerIdRef.current,
           sessionId: sessionIdRef.current,
           passageId: currentPassage.passageId ?? `${slugify(currentPassage.title)}-g${currentPassage.grade}`,
+          passageTitle: currentPassage.title,
           passageGrade: currentPassage.grade,
           passageComplexity: currentPassage.complexity,
           passageRegister: currentPassage.register,
@@ -279,127 +267,180 @@ export default function PracticePage() {
 
   const isNearEnd = timerSeconds >= 50
   const remaining = SESSION_DURATION - timerSeconds
-  const showMap = sessionState === 'idle' || sessionState === 'results'
 
   return (
-    <main className="min-h-screen bg-slate-50 p-8">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold text-slate-800 mb-2">Fluently</h1>
-        <p className="text-slate-500 mb-8">Oral reading fluency assessment</p>
+    <main className="min-h-screen bg-slate-50">
+      {/* Headless Deepgram manager */}
+      <AudioRecorder
+        sessionState={sessionState}
+        onWord={handleWord}
+        onError={(msg) => { setError(msg); setSessionState('idle'); stopTimer() }}
+      />
 
+      {/* ── Blue gradient hero (idle + recording) ── */}
+      {(sessionState === 'idle' || sessionState === 'recording') && (
+        <div className="bg-gradient-to-br from-blue-600 to-indigo-700">
+          <div className="max-w-5xl mx-auto px-6 py-10">
+            {sessionState === 'idle' && (
+              <>
+                <h1 className="text-3xl font-bold text-white">Let&apos;s practice!</h1>
+                <p className="text-blue-100 mt-1.5 text-base">
+                  Read the passage aloud. We&apos;ll listen and give feedback.
+                </p>
+              </>
+            )}
+            {sessionState === 'recording' && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-white">
+                    {passage?.title ?? 'Reading…'}
+                  </h1>
+                  <p className="text-blue-100 mt-1 text-sm">
+                    Oral Reading Fluency · 60 second session
+                  </p>
+                </div>
+                <div className="flex items-center gap-5">
+                  <div className="text-right">
+                    <span className={`text-5xl font-bold tabular-nums ${isNearEnd ? 'text-amber-300' : 'text-white'}`}>
+                      {formatTime(timerSeconds)}
+                    </span>
+                    {isNearEnd && (
+                      <p className="text-amber-300 text-sm font-medium mt-0.5">{remaining}s left</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleSessionEnd}
+                    className="px-6 py-3 bg-white text-blue-700 hover:bg-blue-50 font-semibold rounded-xl text-sm transition-colors"
+                  >
+                    Stop
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Main content ── */}
+      <div className="max-w-5xl mx-auto px-6 py-8">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm">
             {error}
           </div>
         )}
 
-        {/* Headless Deepgram manager */}
-        <AudioRecorder
-          sessionState={sessionState}
-          onWord={handleWord}
-          onError={(msg) => { setError(msg); setSessionState('idle'); stopTimer() }}
-        />
-
-        {/* PassageMap — visible when idle or reviewing results */}
-        {showMap && (
-          <div className="mb-6">
-            <p className="text-sm font-medium text-slate-700 mb-3">
-              {passage ? 'Passage selected — drag to change' : 'Drop a pin to generate a passage'}
-            </p>
+        {/* ── Idle state ── */}
+        {sessionState === 'idle' && (
+          <div className="grid grid-cols-[360px_1fr] gap-6 items-start">
+            {/* PassageMap */}
             <PassageMap
               onGenerate={handleGeneratePassage}
               isGenerating={isGenerating}
               initialComplexity={mapComplexity}
               initialRegister={mapRegister}
-              recommendedPosition={sessionState === 'results' ? nextPassage?.target ?? null : null}
+              recommendedPosition={null}
             />
+
+            {/* Passage info card */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 h-full flex flex-col">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">
+                Choose Your Passage
+              </p>
+
+              {passage ? (
+                <>
+                  <h2 className="text-lg font-bold text-slate-800">{passage.title}</h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Grade {passage.grade} · Target: {passage.targetWCPM} WCPM
+                  </p>
+                  <p className="text-sm text-slate-400 mt-0.5">60 second session</p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Drop a pin anywhere on the canvas to generate a passage at that reading level.
+                </p>
+              )}
+
+              <div className="mt-auto pt-6">
+                <button
+                  onClick={startRecording}
+                  disabled={!passage || isGenerating}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-sm transition-colors"
+                >
+                  {isGenerating ? 'Generating…' : 'Start Reading'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Session timer + controls */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-          {sessionState === 'idle' && (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-slate-700">
-                  {passage ? passage.title : 'No passage selected'}
-                </p>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  {passage ? '60 second session' : 'Drop a pin above to generate one'}
-                </p>
-              </div>
-              <button
-                onClick={startRecording}
-                disabled={!passage || isGenerating}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-              >
-                Start Reading
-              </button>
-            </div>
-          )}
+        {/* Passage display — idle (preview) */}
+        {sessionState === 'idle' && passage && (
+          <div className="mt-6">
+            <PassageDisplay passage={passage} wordStatuses={wordStatuses} />
+          </div>
+        )}
 
-          {sessionState === 'recording' && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-baseline gap-4">
-                <span className={`text-5xl font-bold tabular-nums transition-colors ${isNearEnd ? 'text-amber-500' : 'text-slate-800'}`}>
-                  {formatTime(timerSeconds)}
-                </span>
-                {isNearEnd && (
-                  <span className="text-sm font-medium text-amber-500">{remaining}s left</span>
-                )}
-              </div>
-              <button
-                onClick={handleSessionEnd}
-                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-lg transition-colors"
-              >
-                Stop
-              </button>
-            </div>
-          )}
-
-          {sessionState === 'processing' && (
-            <div className="flex items-center gap-3 text-slate-500">
-              <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              <span className="font-medium">Processing results…</span>
-            </div>
-          )}
-
-          {sessionState === 'results' && (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-slate-700">Session complete</p>
-                <p className="text-sm text-slate-400 mt-0.5">{formatTime(timerSeconds)} recorded</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Passage — visible when loaded */}
-        {passage && (
+        {/* ── Recording state — passage with live color coding ── */}
+        {sessionState === 'recording' && passage && (
           <PassageDisplay passage={passage} wordStatuses={wordStatuses} />
         )}
 
-        {/* Results */}
-        {sessionState === 'results' && metrics && (
-          <MetricsDashboard metrics={metrics} targetWCPM={passage?.targetWCPM} />
+        {/* ── Processing state ── */}
+        {sessionState === 'processing' && (
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <svg className="animate-spin h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            <p className="text-slate-500 font-medium text-sm">Processing results…</p>
+          </div>
         )}
-        {sessionState === 'results' && report && metrics && (
-          <DiagnosticReport
-            report={report}
-            errorType={getErrorType(metrics)}
-            recommendation={recommendation}
-            reasoning={reasoning}
-            selfCorrections={metrics.selfCorrections}
-            selfCorrectionRate={metrics.selfCorrectionRate}
-            history={history}
-            nextPassage={nextPassage}
-            onAdvance={handleAdvance}
-            onRetry={handleRetry}
-            onAcceptRecommendation={handleAcceptRecommendation}
-          />
+
+        {/* ── Results state ── */}
+        {sessionState === 'results' && (
+          <>
+            {/* Session complete header */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Session Complete 🎉</h2>
+                <p className="text-slate-500 text-sm mt-1">Great job! Here&apos;s how you did.</p>
+                <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  {formatTime(timerSeconds)} recorded
+                </p>
+              </div>
+              <div className="text-5xl select-none" aria-hidden="true">🏆</div>
+            </div>
+
+            {passage && (
+              <div className="mb-6">
+                <PassageDisplay passage={passage} wordStatuses={wordStatuses} />
+              </div>
+            )}
+
+            {metrics && <MetricsDashboard metrics={metrics} targetWCPM={passage?.targetWCPM} />}
+
+            {history.length > 1 && <ReadingHistory history={history} />}
+
+            {report && metrics && (
+              <DiagnosticReport
+                report={report}
+                errorType={getErrorType(metrics)}
+                recommendation={recommendation}
+                reasoning={reasoning}
+                selfCorrections={metrics.selfCorrections}
+                selfCorrectionRate={metrics.selfCorrectionRate}
+                history={history}
+                nextPassage={nextPassage}
+                onAdvance={handleAdvance}
+                onRetry={handleRetry}
+                onAcceptRecommendation={handleAcceptRecommendation}
+              />
+            )}
+          </>
         )}
       </div>
     </main>
