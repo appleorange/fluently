@@ -3,18 +3,60 @@ import { Metrics, Recommendation } from '@/lib/types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const BENCHMARKS: Record<number, { wcpmLow: number; wcpmHigh: number }> = {
-  2: { wcpmLow: 90,  wcpmHigh: 110 },
-  4: { wcpmLow: 125, wcpmHigh: 145 },
-  6: { wcpmLow: 150, wcpmHigh: 170 },
+// DIBELS 8th Edition benchmarks — exact strategic/green/blue tiers for the original fixed grades
+const BENCHMARKS: Record<number, { strategic: number; green: number; blue: number }> = {
+  2: { strategic: 99,  green: 125, blue: 159 },
+  4: { strategic: 125, green: 141, blue: 160 },
+  6: { strategic: 121, green: 135, blue: 159 },
 }
+// DIBELS 8th Edition end-of-year "at benchmark" WCPM, grades 1-12 — fallback for AI-generated
+// passages outside 2/4/6 (PassageMap spans the full grade 1-12 complexity range)
+const DIBELS_EOY: Record<number, number> = {
+  1: 71, 2: 107, 3: 124, 4: 133, 5: 142,
+  6: 142, 7: 146, 8: 151, 9: 153, 10: 155, 11: 157, 12: 160
+}
+const ACCURACY_THRESHOLD = 96 // DIBELS 8th Edition
 
 interface DiagnoseRequest {
   metrics: Metrics
   passageGrade: number
   passageTitle: string
+  targetWCPM?: number  // from generate-passage; preferred benchmark source when present
   complexity?: number  // 0-1, present for AI-generated passages
   register?: number    // 0-1, present for AI-generated passages
+}
+
+type Tier = 'intensive' | 'strategic' | 'core'
+type Bench = { strategic: number; green: number; blue: number }
+
+// Grades 2/4/6 have exact published tier cut points. For any other grade, derive
+// approximate strategic/blue tiers from a single benchmark point (the passage's own
+// targetWCPM when available, else the DIBELS EOY grade lookup) using the average
+// ratio observed across the three known grades (~0.85 / ~1.2).
+function resolveBench(grade: number, targetWCPM?: number): Bench {
+  const exact = BENCHMARKS[grade]
+  if (exact) return exact
+  const green = targetWCPM ?? DIBELS_EOY[Math.min(Math.max(Math.round(grade), 1), 12)] ?? 160
+  return { strategic: Math.round(green * 0.85), green, blue: Math.round(green * 1.2) }
+}
+
+function getTier(wcpm: number, accuracy: number, bench: Bench): Tier {
+  if (wcpm < bench.strategic || accuracy < 91) return 'intensive'
+  if (wcpm < bench.green || accuracy < ACCURACY_THRESHOLD) return 'strategic'
+  return 'core'
+}
+
+function recommendationForTier(
+  tier: Tier,
+  wcpm: number,
+  bench: Bench
+): { recommendation: Recommendation; tierLabel: string } {
+  if (tier === 'intensive') return { recommendation: 'retry', tierLabel: 'intensive (needs intervention)' }
+  if (tier === 'strategic') return { recommendation: 'retry', tierLabel: 'strategic (needs support)' }
+  const tierLabel = wcpm >= bench.blue
+    ? 'core, exceeding benchmark — increase difficulty'
+    : 'core (on track)'
+  return { recommendation: 'advance', tierLabel }
 }
 
 function complexityContext(c: number): string {
@@ -38,20 +80,28 @@ function registerContext(r: number): string {
 function buildPrompt(
   metrics: Metrics,
   grade: number,
-  wcpmStatus: string,
-  accuracyStatus: string,
+  bench: Bench,
+  tier: Tier,
+  tierLabel: string,
   complexity?: number,
   register?: number
 ): string {
   const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections } = metrics
-  const bench = BENCHMARKS[grade] ?? { wcpmLow: grade * 30 + 50, wcpmHigh: grade * 30 + 70 }
+  const totalErrors = errorCounts.substitutions + errorCounts.omissions + errorCounts.insertions
+  const scRate = totalErrors > 0 ? Math.round((selfCorrections / totalErrors) * 100) : 0
 
   const passageContext = (complexity !== undefined && register !== undefined)
     ? `- Passage complexity: ${complexityContext(complexity)}
 - Passage register: ${registerContext(register)}`
     : `- Grade ${grade} passage`
 
-  return `You are a reading specialist analyzing a child's oral reading fluency assessment.
+  const tierGuidance: Record<Tier, string> = {
+    intensive: 'INTENSIVE tier — this student needs intervention. Use urgent, direct language and give specific, concrete exercises targeting the exact error pattern.',
+    strategic: 'STRATEGIC tier — this student needs targeted support. Use encouraging language, acknowledge what is working, and give targeted practice for the specific weak area.',
+    core: 'CORE tier — this student is on track. Lead with genuine praise, then push them forward with a slightly harder challenge or refinement.'
+  }
+
+  return `You are a reading specialist analyzing a child's oral reading fluency assessment. Use DIBELS 8th Edition and NAEP standards as your clinical reference.
 
 Return ONLY a JSON object — no markdown, no explanation, nothing else — in exactly this shape:
 {"report":"...","recommendation":"advance"|"retry"|"repeat","reasoning":"..."}
@@ -60,28 +110,41 @@ Rules for the report field:
 - Plain-language diagnostic for a parent or teacher, under 150 words
 - First sentence states the key finding
 - Distinguish DECODING issues (wrong words) from PHRASING FLUENCY issues (poor pausing)
-- Calibrate your feedback to the passage register — e.g. for a very casual passage, some informality from the reader is expected; for a formal passage, precision matters more
-- Give 1-2 specific actionable exercises
-- Warm and encouraging tone, not clinical
+- Calibrate your feedback to the passage register — for casual passages some informality is normal; for formal passages, precision matters more
+- If self-correction rate ≥ 20%, open with praise for metacognitive monitoring before addressing errors
+- ${tierGuidance[tier]}
+- Give 1-2 specific, actionable exercises matched to the primary error type
 - Refer to the reader as "the student" — never use character names from the passage
 
 Rules for recommendation:
-- "advance": wcpmStatus is "at benchmark" AND accuracyStatus is "passing" → student is ready for harder material
-- "repeat": wcpmStatus is "at benchmark" BUT accuracyStatus is "below threshold" → speed is fine but accuracy needs work, try a different passage at same level
-- "retry": wcpmStatus is "below benchmark" → not ready to move on, practice this passage again
+- "advance": tier is "core" → student is ready for harder material
+- "retry": tier is "strategic" or "intensive" → not ready to move on, practice this passage again
 
 Rules for reasoning:
-- One sentence explaining the recommendation, referencing the specific numbers
+- One sentence citing the specific numbers and tier that drove the recommendation
 
 ASSESSMENT DATA:
 ${passageContext}
-- WCPM benchmark: ${bench.wcpmLow}–${bench.wcpmHigh}, accuracy threshold: 95%
-- WCPM: ${wcpm} → wcpmStatus: "${wcpmStatus}"
-- Accuracy: ${accuracy}% → accuracyStatus: "${accuracyStatus}"
-- Substitutions: ${errorCounts.substitutions}, Omissions: ${errorCounts.omissions}, Insertions: ${errorCounts.insertions}
-- Hesitations: ${errorCounts.hesitations} (pauses >500ms)
-- Self-corrections: ${selfCorrections}
-- Pause placement: ${pausePlacement.boundaryPercent}% at natural phrase boundaries (below 50% = phrasing issue)`
+- DIBELS tier: ${tierLabel}
+
+WCPM (DIBELS 8th Ed. tiers — strategic: ${bench.strategic}, green/benchmark: ${bench.green}, blue/above benchmark: ${bench.blue}):
+- Student: ${wcpm} WCPM
+
+ACCURACY (DIBELS 8th Edition threshold: ${ACCURACY_THRESHOLD}%; standard reading-level taxonomy for context):
+- Student: ${accuracy}%
+- ≥ 95% = independent level | 90–94% = instructional level | < 90% = frustration level
+
+ERROR TAXONOMY:
+- Substitutions: ${errorCounts.substitutions} (decoding breakdown — wrong word read)
+- Omissions: ${errorCounts.omissions} (skipped expected word)
+- Insertions: ${errorCounts.insertions} (added word not in text)
+- Hesitations: ${errorCounts.hesitations} (pause > 500ms, not counted as errors)
+- Self-corrections: ${selfCorrections} of ${totalErrors} errors corrected (${scRate}% self-correction rate)
+  → Self-corrections signal active metacognitive monitoring; ≥ 20% rate is a meaningful strength
+
+PROSODIC FLUENCY (NAEP Oral Reading Fluency rubric proxy):
+- ${pausePlacement.boundaryPercent}% of pauses at syntactic phrase boundaries (${pausePlacement.atBoundary} of ${pausePlacement.totalPauses} pauses)
+- ≥ 75% = fluent prosody (NAEP Level 3–4) | 50–74% = developing (Level 2–3) | < 50% = phrasing issue (Level 1–2)`
 }
 
 function parseRecommendation(raw: string): Recommendation {
@@ -92,21 +155,21 @@ function parseRecommendation(raw: string): Recommendation {
 export async function POST(request: Request) {
   try {
     const body: DiagnoseRequest = await request.json()
-    const { metrics, passageGrade, complexity, register } = body
+    const { metrics, passageGrade, targetWCPM, complexity, register } = body
 
     if (!metrics) {
       return Response.json({ error: 'Missing metrics' }, { status: 400 })
     }
 
-    const bench = BENCHMARKS[passageGrade] ?? { wcpmLow: passageGrade * 30 + 50, wcpmHigh: passageGrade * 30 + 70 }
-    const wcpmStatus = metrics.wcpm >= bench.wcpmLow ? 'at benchmark' : 'below benchmark'
-    const accuracyStatus = metrics.accuracy >= 95 ? 'passing' : 'below threshold'
+    const bench = resolveBench(passageGrade, targetWCPM)
+    const tier = getTier(metrics.wcpm, metrics.accuracy, bench)
+    const { tierLabel } = recommendationForTier(tier, metrics.wcpm, bench)
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       messages: [
-        { role: 'user', content: buildPrompt(metrics, passageGrade, wcpmStatus, accuracyStatus, complexity, register) }
+        { role: 'user', content: buildPrompt(metrics, passageGrade, bench, tier, tierLabel, complexity, register) }
       ]
     })
 

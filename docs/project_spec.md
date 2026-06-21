@@ -143,3 +143,5 @@ fluently/
 | Complexity axis (X) | Flesch-Kincaid 0-1 normalized | FK = 1.015 × avg_sentence_len + 84.6 × avg_syllables - 15.59 |
 | Register axis (Y) | 0 (casual) → 1 (formal) | Weighted: contraction density + Latinate ratio + passive voice density |
 | Passage words field | Derived at runtime | `text.split(/\s+/)` — no hardcoded words array in JSON |
+| WCPM benchmarks (DIBELS 8th Ed.) | G2: strategic 99 / green 125 / blue 159 · G4: strategic 125 / green 141 / blue 160 · G6: strategic 121 / green 135 / blue 159 | Three-tier fluency screening (intensive / strategic / core) per official DIBELS 8th Edition |
+| Accuracy threshold | 96% (DIBELS 8th Edition) | Below this, accuracy concerns push the tier toward strategic/intensive regardless of WCPM |

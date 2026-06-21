@@ -66,6 +66,13 @@ export default function Home() {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setPassage(data)
+      setSessionState('idle')
+      setWordStream([])
+      setAligned([])
+      setMetrics(null)
+      setReport('')
+      setRecommendation('retry')
+      setReasoning('')
     } catch {
       setError('Failed to generate passage. Please try again.')
     } finally {
@@ -146,6 +153,7 @@ export default function Home() {
           metrics: computedMetrics,
           passageGrade: currentPassage.grade,
           passageTitle: currentPassage.title,
+          targetWCPM: currentPassage.targetWCPM,
           complexity: currentPassage.complexity,
           register: currentPassage.register
         })
