@@ -105,8 +105,8 @@ User drags a red-orange pin anywhere on the dotted canvas. On release, Claude ge
   - [x] Passage starts null — user must generate before Start Reading enables
   - [x] Map stays visible in idle and results states; hidden during recording/processing
   - [x] "Advance" clears passage so user picks a new harder position; "Retry" keeps same passage
-- [ ] Update diagnose prompt to reference complexity/register context (stretch goal)
-- [ ] **Verification:** drag to 5 positions, confirm distinct passages matching complexity and register
+- [x] Update diagnose prompt to reference complexity/register context — Claude now receives complexity tier and register descriptor, calibrates feedback accordingly (e.g. informality not penalised on casual passages)
+- [x] **Verification:** 5 positions tested via API — distinct passages confirmed, complexity (grade 2→11, WCPM 74→186) and register (casual slang vs formal prose) both correct
 
 ---
 
