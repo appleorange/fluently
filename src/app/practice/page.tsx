@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse, Recommendation, HistoryPoint, NextPassageRecommendation } from '@/lib/types'
+import { align } from '@/lib/alignment'
 import AudioRecorder from '@/components/AudioRecorder'
 import PassageDisplay from '@/components/PassageDisplay'
 import DiagnosticReport, { ReadingHistory } from '@/components/DiagnosticReport'
@@ -45,6 +46,7 @@ export default function PracticePage() {
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [nextPassage, setNextPassage] = useState<NextPassageRecommendation | null>(null)
   const [history, setHistory] = useState<HistoryPoint[]>([])
+  const [processingStep, setProcessingStep] = useState<1 | 2 | 3>(1)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const passageRef = useRef<Passage | null>(null)
@@ -107,15 +109,10 @@ export default function PracticePage() {
 
   useEffect(() => {
     if (sessionState !== 'recording' || !passageRef.current || wordStream.length === 0) return
-    const run = async () => {
-      const { align } = await import('@/lib/alignment')
-      const gotWords = wordStream.map(w => w.word)
-      const lookAhead = Math.min(gotWords.length + 3, passageRef.current!.words.length)
-      const partialExpected = passageRef.current!.words.slice(0, lookAhead)
-      const alignedWords = align(partialExpected, gotWords, wordStream)
-      setAligned(alignedWords)
-    }
-    run()
+    const gotWords = wordStream.map(w => w.word)
+    const lookAhead = Math.min(gotWords.length + 3, passageRef.current!.words.length)
+    const partialExpected = passageRef.current!.words.slice(0, lookAhead)
+    setAligned(align(partialExpected, gotWords, wordStream))
   }, [wordStream, sessionState])
 
   const wordStatuses = useMemo(() => {
@@ -153,13 +150,15 @@ export default function PracticePage() {
       return
     }
     setSessionState('processing')
+    setProcessingStep(1)
     try {
-      const { align } = await import('@/lib/alignment')
       const gotWords = wordStream.map(w => w.word)
       const alignedWords = align(currentPassage.words, gotWords, wordStream)
       setAligned(alignedWords)
+      setProcessingStep(2)
       const { computeMetrics } = await import('@/lib/metrics')
       const computedMetrics = await computeMetrics(alignedWords, wordStream, currentPassage.text)
+      setProcessingStep(3)
       setMetrics(computedMetrics)
 
       const { computeSkillVector } = await import('@/lib/sessionVector')
@@ -240,6 +239,7 @@ export default function PracticePage() {
     setRecommendation('retry')
     setReasoning('')
     setError('')
+    setProcessingStep(1)
     if (!keepPassage) setPassage(null)
   }, [stopTimer])
 
@@ -279,8 +279,9 @@ export default function PracticePage() {
 
       {/* ── Blue gradient hero (idle + recording) ── */}
       {(sessionState === 'idle' || sessionState === 'recording') && (
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700">
-          <div className="max-w-5xl mx-auto px-6 py-10">
+        <div className="relative bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-900 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.12)_0%,_transparent_60%)] pointer-events-none" />
+          <div className="max-w-5xl mx-auto px-6 py-14 relative">
             {sessionState === 'idle' && (
               <>
                 <h1 className="text-3xl font-bold text-white">Let&apos;s practice!</h1>
@@ -298,6 +299,16 @@ export default function PracticePage() {
                   <p className="text-blue-100 mt-1 text-sm">
                     Oral Reading Fluency · 60 second session
                   </p>
+                  {/* Animated waveform bars */}
+                  <div className="flex items-end gap-[3px] h-6 mt-3">
+                    {[0.6, 1, 0.75, 1, 0.5, 0.85, 0.65, 1, 0.7, 0.9, 0.55, 0.8].map((delay, i) => (
+                      <span
+                        key={i}
+                        className="waveform-bar block w-1 rounded-full bg-white/70"
+                        style={{ height: '100%', animationDelay: `${(i * delay * 0.12).toFixed(2)}s` }}
+                      />
+                    ))}
+                  </div>
                 </div>
                 <div className="flex items-center gap-5">
                   <div className="text-right">
@@ -374,8 +385,24 @@ export default function PracticePage() {
           </div>
         )}
 
+        {/* Passage skeleton while generating */}
+        {sessionState === 'idle' && isGenerating && (
+          <div className="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+            <div className="h-3 bg-slate-100 rounded-full w-1/4 mb-5 animate-pulse" />
+            <div className="space-y-2.5">
+              {[1, 0.95, 0.88, 1, 0.72, 0.9, 0.6].map((w, i) => (
+                <div
+                  key={i}
+                  className="h-2.5 bg-slate-100 rounded-full animate-pulse"
+                  style={{ width: `${w * 100}%`, animationDelay: `${i * 0.07}s` }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Passage display — idle (preview) */}
-        {sessionState === 'idle' && passage && (
+        {sessionState === 'idle' && passage && !isGenerating && (
           <div className="mt-6">
             <PassageDisplay passage={passage} wordStatuses={wordStatuses} />
           </div>
@@ -388,12 +415,52 @@ export default function PracticePage() {
 
         {/* ── Processing state ── */}
         {sessionState === 'processing' && (
-          <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <svg className="animate-spin h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            <p className="text-slate-500 font-medium text-sm">Processing results…</p>
+          <div className="flex flex-col items-center justify-center py-24 gap-8">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-slate-800">Processing results</h2>
+              <p className="text-sm text-slate-400 mt-1">Hang tight, this takes a few seconds</p>
+            </div>
+
+            <div className="flex flex-col gap-4 w-full max-w-xs">
+              {([
+                { label: 'Aligning transcript', step: 1 },
+                { label: 'Computing metrics',   step: 2 },
+                { label: 'Writing your report', step: 3 },
+              ] as const).map(({ label, step }) => {
+                const done   = processingStep > step
+                const active = processingStep === step
+                return (
+                  <div key={step} className={`flex items-center gap-3 transition-opacity duration-300 ${active || done ? 'opacity-100' : 'opacity-30'}`}>
+                    <div className="w-6 h-6 shrink-0 flex items-center justify-center">
+                      {done ? (
+                        <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                          <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      ) : active ? (
+                        <svg className="animate-spin w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border-2 border-slate-200" />
+                      )}
+                    </div>
+                    <span className={`text-sm font-medium transition-colors duration-300 ${done ? 'text-green-600' : active ? 'text-slate-800' : 'text-slate-400'}`}>
+                      {label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="w-full max-w-xs h-1 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${((processingStep - 1) / 3) * 100}%` }}
+              />
+            </div>
           </div>
         )}
 

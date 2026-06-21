@@ -335,7 +335,7 @@ export default function HomePage() {
                 Fluently transcribes your reading in real time using Deepgram and Redis, aligns it to the target passage with Levenshtein sequence alignment, and classifies every deviation, such as substitutions, omissions, hesitations, against the syntactic structure of the text by utilizing pattern recognition.
               </p>
               <p className="text-slate-500 text-base leading-relaxed">
-                The result is a diagnostic report that goes beyond words per minute telling you what kind of errors are occurring, whether they&apos;re consistent, and what they indicate about the reader&apos;s underlying process. Designed for ESL learners and those in speech or reading therapy, Fluently brings the same analysis a specialist would generate from a scored passage to anyone, for free.
+                The result is a diagnostic report that goes beyond words per minute telling you what kind of errors are occurring, whether they&apos;re consistent, and what they indicate about the reader&apos;s underlying process. Designed for children learning or improving their speech, Fluently brings an accurate analysis from scored passages to anyone, for free.
               </p>
             </div>
 
