@@ -120,15 +120,74 @@ Goal: reliable, beautiful demo for judges
 - [ ] Identify best demo passage (something with interesting errors likely — medium complexity, formal register)
 - [ ] **Verification:** full end-to-end demo works 3 times in a row without breaking
 
-### Redis session caching
-- [ ] Sign up for Upstash at upstash.com, get REST URL and token
-- [ ] Install `@upstash/redis`
-- [ ] Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to `.env.local` and `.env.example`
-- [ ] `src/lib/redis.ts` — initialize Upstash Redis client, verify connection with a test read/write
-- [ ] Update `src/app/api/diagnose/route.ts` — check Redis for previous attempt on same passage before calling Claude, include previous metrics in Claude prompt if found, store current attempt with 24hr TTL after Claude responds
-- [ ] Update `DiagnosticReport.tsx` — if previous attempt exists in response, show comparison row above report ("Last attempt: 87 WCPM → This attempt: 94 WCPM" with green arrow if improved, red if regressed)
-- [ ] Update `page.tsx` — generate `sessionId` with `crypto.randomUUID()` on first load, pass to diagnose API call
-- [ ] **Verification:** do two reads of the same passage, confirm second report references the first attempt's metrics
+### Redis AI Integration (Beyond Caching) — targeting Redis sponsor prize
+Core concept: Redis vector search finds the optimal next passage across both complexity and register axes simultaneously, based on the reader's current error profile. This is not "find a harder passage" — it's "find the passage in our 2D skill space that targets your specific weak points."
+
+#### Setup
+- [ ] Sign up for Redis Cloud at redis.io/try-free (free tier)
+- [ ] Install `@redis/client`
+- [ ] Add `REDIS_URL` to `.env.local` and `.env.example`
+- [ ] Create `src/lib/redis.ts` — initialize client, verify connection
+
+#### Passage vector index
+- [ ] Create `src/lib/passageVectors.ts` — defines the vector schema for each passage:
+  ```
+  {
+    passageId: string,
+    complexity: number,        // 0-1 Flesch-Kincaid normalized
+    register: number,          // 0-1 casual→formal
+    avgSentenceLength: number,
+    latinateRatio: number,     // Latinate vocab density
+    functionWordDensity: number,
+    syntacticDepth: number,    // from compromise.js
+    targetWCPM: number,
+    tolerances: {
+      substitution: number,    // acceptable error rate for this passage
+      omission: number,
+      pausePlacement: number   // target boundary hit rate
+    }
+  }
+  ```
+- [ ] Pre-compute vectors for all 9 PassageMap passages and seed Redis on app startup if index doesn't exist
+- [ ] Create HNSW vector index in Redis on the passage vector fields
+
+#### Session error profile vector
+- [ ] Create `src/lib/sessionVector.ts` — derives a reader's current skill vector from session metrics:
+  ```
+  {
+    complexityHandling: number,   // derived from error rate on polysyllabic words
+    registerHandling: number,     // derived from function word error rate
+    wcpmPercentile: number,       // WCPM relative to grade benchmark
+    pausePlacementScore: number,  // % pauses at syntactic boundaries
+    dominantErrorType: string,    // substitution | omission | insertion | hesitation
+    selfCorrectionRate: number
+  }
+  ```
+- [ ] The "optimal next passage" vector is computed as: current skill vector + a small step in the direction of weakest dimension. If `registerHandling` is lowest, step right on Y axis. If `complexityHandling` is lowest, stay on X axis. Never step in both directions simultaneously.
+
+#### KNN search
+- [ ] After each session, compute the session error profile vector and the optimal next passage vector
+- [ ] Run KNN search (k=3) against the passage index to find the 3 closest passages to the optimal next vector
+- [ ] Return the top match as the recommended next passage
+- [ ] Pass to Claude in the diagnostic prompt: "Based on this reader's error profile, the optimal next passage is [title] — it targets [specific weakness] while keeping [strength dimension] stable"
+
+#### Agent memory
+- [ ] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage
+- [ ] Store each session's error profile vector + metrics in Redis under `reader:{readerId}:sessions` append-only, TTL 30 days
+- [ ] On each new session fetch full history — if `sessionCount >= 3` switch Claude to longitudinal prompt mode
+
+#### UI updates
+- [ ] After `DiagnosticReport` renders, show "Your next passage" card: title, complexity/register position on a mini 2D grid, and one sentence from Claude explaining why this passage was chosen
+- [ ] Show the reader's current position on the PassageMap 2D canvas and the recommended next position as an arrow
+
+#### Demo story for judges
+> "Redis isn't caching here. It's powering a real-time vector search across a 2D skill space — complexity and register — to find the pedagogically optimal next reading challenge based on where this reader's errors are concentrated. The recommendation isn't just 'harder' — it's 'harder in the right dimension.'"
+
+#### Verification
+- [ ] Seed all 9 passage vectors into Redis manually, confirm index created
+- [ ] Run a session with high function word errors, confirm recommended next passage moves right on register axis not up on complexity axis
+- [ ] Run a session with high polysyllabic substitutions, confirm recommended next passage stays at current register but reduces complexity
+- [ ] Run 3 sessions with same readerId, confirm Claude shifts to longitudinal language on session 3
 
 ### Deepgram depth
 - [x] Switched streaming model from `nova-2` to `nova-3` in `src/lib/deepgram.ts` for better transcription accuracy
