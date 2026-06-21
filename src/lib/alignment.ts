@@ -73,12 +73,14 @@ export function align(
       const minCost = Math.min(sub, omit, ins)
 
       if (sub === minCost) {
+        const ts = timestamps[j - 1]
+        const lowConfidence = ts !== undefined && ts.confidence < 0.7
         aligned.unshift({
           expected: expected[i - 1],
           got: got[j - 1],
-          status: 'substitution',
+          status: lowConfidence ? 'uncertain' : 'substitution',
           index: i - 1,
-          timestamp: timestamps[j - 1]
+          timestamp: ts
         })
         i--; j--
       } else if (omit === minCost) {
