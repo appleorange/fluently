@@ -5,7 +5,6 @@ export interface WordTimestamp {
   start: number      // seconds from session start
   duration: number   // seconds
   confidence: number // 0-1 from Deepgram
-  disfluency?: boolean // true if Deepgram tagged this as a filler word ("um", "uh", etc.)
 }
 
 export type WordStatus = 'correct' | 'substitution' | 'omission' | 'insertion' | 'hesitation' | 'uncertain' | 'pending'
@@ -22,8 +21,7 @@ export interface ErrorCounts {
   substitutions: number
   omissions: number
   insertions: number
-  verbalHesitations: number
-  silentHesitations: number
+  hesitations: number
 }
 
 export interface PausePlacement {
