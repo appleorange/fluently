@@ -130,7 +130,7 @@ Goal: reliable, beautiful demo for judges
 - [ ] Capture confidence scores from Deepgram word objects (already in the response, just not used) — if confidence < 0.7 on an error word, flag as `"uncertain"` instead of `"error"` in the alignment output to avoid penalizing transcription noise
 
 ### Disfluency detection
-- [ ] Add `disfluencies: true` to Deepgram streaming params in `src/lib/deepgram.ts`
+- [ ] Add `filler_words: true` to Deepgram streaming params in `src/lib/deepgram.ts` (verified via Deepgram docs: `disfluencies` is not a real param — `filler_words` is correct, supported on Nova, Nova-2, Nova-3 general models)
 - [ ] Update `WordTimestamp` type in `src/lib/types.ts` to include optional `disfluency?: boolean` field
 - [ ] Update `src/lib/metrics.ts` — capture disfluency markers from Deepgram word objects separately from timestamp-gap hesitations. Add `verbalHesitations: number` and `silentHesitations: number` as distinct fields in `ErrorCounts`, replacing the single `hesitations` count
 - [ ] Update `src/app/api/diagnose/route.ts` — pass both hesitation types to Claude separately. Prompt Claude to distinguish: verbal hesitations ("um", "uh", repetitions) suggest word retrieval difficulty, silent hesitations suggest decoding effort or phrasing breakdown
