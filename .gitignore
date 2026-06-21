@@ -19,3 +19,7 @@ tsconfig.tsbuildinfo
 # Claude Code local settings
 .claude/
 .gstack/
+
+# Internal planning docs — not part of the public repo
+CLAUDE.md
+docs/
