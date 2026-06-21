@@ -49,6 +49,8 @@ export interface Passage {
   text: string
   words: string[]
   targetWCPM: number
+  complexity?: number  // 0-1, present on AI-generated passages
+  register?: number    // 0-1, present on AI-generated passages
 }
 
 export type ErrorType = 'decoding' | 'phrasing' | 'mixed' | 'fluent'
