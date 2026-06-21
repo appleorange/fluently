@@ -145,7 +145,9 @@ export default function Home() {
         body: JSON.stringify({
           metrics: computedMetrics,
           passageGrade: currentPassage.grade,
-          passageTitle: currentPassage.title
+          passageTitle: currentPassage.title,
+          complexity: currentPassage.complexity,
+          register: currentPassage.register
         })
       })
       const data = await res.json()

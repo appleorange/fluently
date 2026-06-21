@@ -68,62 +68,58 @@ export default function PassageMap({
 
   return (
     <div className="flex flex-col gap-1 select-none">
-      <div className="flex gap-2 items-stretch">
-        {/* Y-axis labels */}
-        <div className="flex flex-col justify-between items-end text-xs text-slate-400 pr-1 w-12">
-          <span>Formal</span>
-          <span>Casual</span>
-        </div>
+      {/* Canvas — labels live inside the SVG so alignment is exact */}
+      <div className="relative">
+        <svg
+          ref={svgRef}
+          width={SIZE}
+          height={SIZE}
+          className="rounded-xl border border-slate-200 bg-white touch-none"
+          style={{ cursor: isGenerating ? 'wait' : 'crosshair' }}
+          onPointerDown={isGenerating ? undefined : handlePointerDown}
+          onPointerMove={isGenerating ? undefined : handlePointerMove}
+          onPointerUp={isGenerating ? undefined : handlePointerUp}
+        >
+          {dots}
 
-        {/* Canvas */}
-        <div className="relative">
-          <svg
-            ref={svgRef}
-            width={SIZE}
-            height={SIZE}
-            className="rounded-xl border border-slate-200 bg-white touch-none"
-            style={{ cursor: isGenerating ? 'wait' : 'crosshair' }}
-            onPointerDown={isGenerating ? undefined : handlePointerDown}
-            onPointerMove={isGenerating ? undefined : handlePointerMove}
-            onPointerUp={isGenerating ? undefined : handlePointerUp}
-          >
-            {dots}
+          {/* Y-axis — vertical line through center */}
+          <line x1={SIZE / 2} y1={0} x2={SIZE / 2} y2={SIZE} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" style={{ pointerEvents: 'none' }} />
+          <text x={SIZE / 2} y={14} fontSize={10} fill="#94a3b8" textAnchor="middle" style={{ pointerEvents: 'none', userSelect: 'none' }}>Formal</text>
+          <text x={SIZE / 2} y={SIZE - 6} fontSize={10} fill="#94a3b8" textAnchor="middle" style={{ pointerEvents: 'none', userSelect: 'none' }}>Casual</text>
 
-            {/* Draggable point */}
-            <circle
-              cx={pos.x}
-              cy={pos.y}
-              r={POINT_R}
-              fill="#f97316"
-              stroke="#c2410c"
-              strokeWidth={2.5}
-              className="pointer-events-none"
-              style={{ filter: 'drop-shadow(0 2px 6px rgba(249,115,22,0.45))' }}
-            />
+          {/* X-axis — horizontal line through center */}
+          <line x1={0} y1={SIZE / 2} x2={SIZE} y2={SIZE / 2} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" style={{ pointerEvents: 'none' }} />
+          <text x={6} y={SIZE / 2 - 4} fontSize={10} fill="#94a3b8" textAnchor="start" style={{ pointerEvents: 'none', userSelect: 'none' }}>Easy</text>
+          <text x={SIZE - 6} y={SIZE / 2 - 4} fontSize={10} fill="#94a3b8" textAnchor="end" style={{ pointerEvents: 'none', userSelect: 'none' }}>Difficult</text>
 
-            {/* Generating overlay */}
-            {isGenerating && (
-              <rect x={0} y={0} width={SIZE} height={SIZE} fill="rgba(248,250,252,0.72)" rx={12} />
-            )}
-          </svg>
+          {/* Draggable point */}
+          <circle
+            cx={pos.x}
+            cy={pos.y}
+            r={POINT_R}
+            fill="#f97316"
+            stroke="#c2410c"
+            strokeWidth={2.5}
+            style={{ filter: 'drop-shadow(0 2px 6px rgba(249,115,22,0.45))', pointerEvents: 'none' }}
+          />
 
-          {/* Spinner centered over canvas */}
+          {/* Generating overlay */}
           {isGenerating && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <svg className="animate-spin h-8 w-8 text-orange-500" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            </div>
+            <rect x={0} y={0} width={SIZE} height={SIZE} fill="rgba(248,250,252,0.72)" rx={12} />
           )}
-        </div>
+        </svg>
+
+        {/* Spinner centered over canvas */}
+        {isGenerating && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <svg className="animate-spin h-8 w-8 text-orange-500" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          </div>
+        )}
       </div>
 
-      {/* X-axis labels */}
-      <div className="flex justify-between text-xs text-slate-400 pl-14">
-        <span>Easy</span>
-        <span>Difficult</span>
-      </div>
     </div>
   )
 }
