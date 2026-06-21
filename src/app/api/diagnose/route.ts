@@ -1,7 +1,70 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { getRedis } from '@/lib/redis'
 import { Metrics, Recommendation } from '@/lib/types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+interface SessionDoc {
+  sessionId: string
+  timestamp: number
+  metrics: { wcpm: number; accuracy: number }
+  errorCounts: { substitutions: number; omissions: number; insertions: number; hesitations: number }
+  pausePlacement: { boundaryPercent: number }
+  selfCorrectionRate: number
+}
+
+// Prior sessions only — the current session hasn't been written to Redis yet (page.tsx logs it
+// separately, fire-and-forget, after this call). Degrades to an empty array (snapshot mode) on
+// any Redis error instead of failing the whole report.
+async function fetchPriorSessions(readerId: string): Promise<SessionDoc[]> {
+  try {
+    const redis = await getRedis()
+    const sessionIds = await redis.lRange(`reader:${readerId}:sessionIndex`, 0, -1)
+    if (sessionIds.length === 0) return []
+    const docs = await Promise.all(
+      sessionIds.map(id => redis.get(`reader:${readerId}:sessions:${id}`))
+    )
+    return docs
+      .filter((d): d is string => d !== null)
+      .map(d => JSON.parse(d) as SessionDoc)
+      .sort((a, b) => a.timestamp - b.timestamp)
+  } catch (error) {
+    console.error('Failed to fetch session history, falling back to snapshot mode:', error)
+    return []
+  }
+}
+
+function longitudinalContext(prior: SessionDoc[], current: Metrics): string {
+  if (prior.length === 0) return ''
+
+  const row = (label: string, m: { wcpm: number; accuracy: number }, e: SessionDoc['errorCounts'], p: { boundaryPercent: number }, sc: number) =>
+    `| ${label} | ${m.wcpm} | ${m.accuracy}% | ${e.substitutions} | ${e.omissions} | ${e.insertions} | ${e.hesitations} | ${p.boundaryPercent}% | ${Math.round(sc * 100)}% |`
+
+  const rows = prior.map((s, i) =>
+    row(`Session ${i + 1}`, s.metrics, s.errorCounts, s.pausePlacement, s.selfCorrectionRate)
+  )
+  rows.push(row(`Session ${prior.length + 1} (today)`, current, current.errorCounts, current.pausePlacement, current.selfCorrectionRate))
+
+  const table = `| Session | WCPM | Accuracy | Subs | Omit | Ins | Hes | Boundary% | SelfCorr% |
+|---|---|---|---|---|---|---|---|---|
+${rows.join('\n')}`
+
+  const verifyRule = 'Before writing the report, re-read every number you plan to cite directly off the table above — do not estimate or recall from memory.'
+
+  if (prior.length === 1) {
+    return `
+
+READING HISTORY (comparison mode — this is the student's 2nd session):
+${table}
+Note which numbers improved, which regressed, and call out the most meaningful change explicitly. ${verifyRule}`
+  }
+
+  return `
+
+READING HISTORY (pattern-recognition mode — this is the student's 3rd or later session, ${prior.length + 1} total):
+${table}
+Across these sessions, identify which error types are PERSISTING, WORSENING, or RESOLVING. Distinguish a true pattern (consistent across 3+ sessions) from session-to-session noise. If a specific error type or pause-placement trend stands out, name it explicitly and explain what it suggests (e.g. consistently low boundary-pause percent suggests a prosodic chunking issue, not a decoding issue). ${verifyRule}`
+}
 
 // DIBELS 8th Edition benchmarks — exact strategic/green/blue tiers for the original fixed grades
 const BENCHMARKS: Record<number, { strategic: number; green: number; blue: number }> = {
@@ -22,6 +85,7 @@ interface DiagnoseRequest {
   passageGrade: number
   passageTitle: string
   targetWCPM?: number  // from generate-passage; preferred benchmark source when present
+  readerId?: string     // present once page.tsx has generated/loaded a persistent reader identity
   complexity?: number  // 0-1, present for AI-generated passages
   register?: number    // 0-1, present for AI-generated passages
 }
@@ -83,6 +147,7 @@ function buildPrompt(
   bench: Bench,
   tier: Tier,
   tierLabel: string,
+  priorSessions: SessionDoc[],
   complexity?: number,
   register?: number
 ): string {
@@ -100,6 +165,12 @@ function buildPrompt(
     core: 'CORE tier — this student is on track. Lead with genuine praise, then push them forward with a slightly harder challenge or refinement.'
   }
 
+  const longitudinalRule = priorSessions.length === 1
+    ? '\n- A reading history is provided below — lead with how this session compares to the last one before getting into today\'s specific errors'
+    : priorSessions.length >= 2
+    ? '\n- A multi-session reading history is provided below — lead with the persisting/worsening/resolving pattern across sessions, not just today\'s snapshot'
+    : ''
+
   return `You are a reading specialist analyzing a child's oral reading fluency assessment. Use DIBELS 8th Edition and NAEP standards as your clinical reference.
 
 Return ONLY a JSON object — no markdown, no explanation, nothing else — in exactly this shape:
@@ -113,7 +184,7 @@ Rules for the report field:
 - If self-correction rate ≥ 20%, open with praise for metacognitive monitoring before addressing errors
 - ${tierGuidance[tier]}
 - Give 1-2 specific, actionable exercises matched to the primary error type
-- Refer to the reader as "the student" — never use character names from the passage
+- Refer to the reader as "the student" — never use character names from the passage${longitudinalRule}
 
 Rules for recommendation:
 - "advance": tier is "core" → student is ready for harder material
@@ -143,7 +214,7 @@ ERROR TAXONOMY:
 
 PROSODIC FLUENCY (NAEP Oral Reading Fluency rubric proxy):
 - ${pausePlacement.boundaryPercent}% of pauses at syntactic phrase boundaries (${pausePlacement.atBoundary} of ${pausePlacement.totalPauses} pauses)
-- ≥ 75% = fluent prosody (NAEP Level 3–4) | 50–74% = developing (Level 2–3) | < 50% = phrasing issue (Level 1–2)`
+- ≥ 75% = fluent prosody (NAEP Level 3–4) | 50–74% = developing (Level 2–3) | < 50% = phrasing issue (Level 1–2)${longitudinalContext(priorSessions, metrics)}`
 }
 
 function parseRecommendation(raw: string): Recommendation {
@@ -154,7 +225,7 @@ function parseRecommendation(raw: string): Recommendation {
 export async function POST(request: Request) {
   try {
     const body: DiagnoseRequest = await request.json()
-    const { metrics, passageGrade, targetWCPM, complexity, register } = body
+    const { metrics, passageGrade, targetWCPM, readerId, complexity, register } = body
 
     if (!metrics) {
       return Response.json({ error: 'Missing metrics' }, { status: 400 })
@@ -163,12 +234,13 @@ export async function POST(request: Request) {
     const bench = resolveBench(passageGrade, targetWCPM)
     const tier = getTier(metrics.wcpm, metrics.accuracy, bench)
     const { tierLabel } = recommendationForTier(tier, metrics.wcpm, bench)
+    const priorSessions = readerId ? await fetchPriorSessions(readerId) : []
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       messages: [
-        { role: 'user', content: buildPrompt(metrics, passageGrade, bench, tier, tierLabel, complexity, register) }
+        { role: 'user', content: buildPrompt(metrics, passageGrade, bench, tier, tierLabel, priorSessions, complexity, register) }
       ]
     })
 

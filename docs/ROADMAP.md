@@ -175,9 +175,9 @@ Core concept: Redis vector search finds the optimal next passage across both com
 - [ ] Pass to Claude in the diagnostic prompt: "Based on this reader's error profile, the optimal next passage is [title] — it targets [specific weakness] while keeping [strength dimension] stable"
 
 #### Agent memory
-- [ ] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage
-- [ ] Store each session's error profile vector + metrics in Redis — exact schema below
-- [ ] On each new session fetch full history — if `sessionCount >= 3` switch Claude to longitudinal prompt mode
+- [x] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage — `page.tsx`
+- [x] Store each session's error profile vector + metrics in Redis — exact schema below. Implemented in `src/lib/redis.ts` (singleton client), `src/lib/sessionVector.ts` (pure `computeSkillVector`, offline-verified by hand), `src/app/api/session/route.ts` (writes `reader:{readerId}:sessions:{sessionId}` + appends to `reader:{readerId}:sessionIndex`, both TTL 30 days). **Live-verified** (2026-06-20): ran a real session, confirmed the actual Redis document and index list match the schema exactly. This same mechanism also satisfies the "Longitudinal error tracking" storage bullets below — see note there.
+- [ ] On each new session fetch full history — if `sessionCount >= 3` switch Claude to longitudinal prompt mode (deferred to Round 2 — `/api/session` already returns `sessionCount` in its response, ready for `diagnose/route.ts` to consume)
 
 **Exact Redis storage schema:**
 
@@ -292,19 +292,13 @@ Explored using Deepgram's `filler_words` param to distinguish verbal hesitations
 - [ ] **Verification:** simulate a session with 3 self-corrections, confirm Claude report leads with explicit praise for self-corrections before addressing remaining errors
 
 ### Longitudinal error tracking (diagnostic arc)
-- [ ] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage on first visit in `page.tsx`
-- [ ] After each session store error log in Redis under key `reader:{readerId}:sessions` as append-only list, TTL 30 days. Each entry: `{sessionId, passageId, passageGrade, wcpm, accuracy, errorCounts, selfCorrectionRate, timestamp}`
-- [ ] On each new session fetch full history for this `readerId` before calling Claude. Pass session count to diagnose route
-- [ ] If `sessionCount < 3`: use existing snapshot prompt ("here is what happened today")
-- [ ] If `sessionCount >= 3`: switch to longitudinal prompt — pass aggregated error history and instruct Claude to identify which error types are persisting, worsening, or resolving. Example structured input to Claude:
-  ```
-  Session 1: 6 function word omissions, 2 at clause boundary
-  Session 2: 4 function word omissions, 3 at clause boundary
-  Session 3: 8 function word omissions, 5 at clause boundary
-  Pattern: increasing rate at clause boundaries → prosodic chunking issue not attention
-  ```
+- [x] Generate persistent `readerId` + store each session in Redis — same mechanism as "Agent memory" above (Redis AI Integration section), built once and shared by both roadmap items. See that section for implementation details and live-verification notes.
+- [x] On each new session fetch full history for this `readerId` before calling Claude (`fetchPriorSessions` in `diagnose/route.ts`, gracefully degrades to snapshot mode on any Redis error)
+- [x] Three prompt modes implemented (more granular than the original 2-mode spec): **snapshot** (0 prior sessions, unchanged existing behavior), **comparison** (1 prior — explicit "what improved/regressed" framing), **pattern-recognition** (2+ priors — persisting/worsening/resolving language). History is passed to Claude as a markdown table (WCPM/accuracy/error counts/boundary%/self-correction% per session) rather than prose lines — switched after an early test showed Claude misstating a historical number; the table + an explicit "re-read every number from the table, don't recall from memory" instruction fixed it.
 - [ ] Update `DiagnosticReport.tsx` — after 3+ sessions show a "Reading history" section above the current report with a simple timeline of WCPM and accuracy across sessions with trend arrows
-- [ ] **Verification:** simulate 3 sessions manually by seeding Redis directly, confirm Claude report language shifts from snapshot to pattern recognition on the 3rd session
+- [x] **Verified live** (2026-06-20): ran 5 real sessions in sequence. Confirmed snapshot → comparison → pattern-recognition mode switches correctly at each threshold, confirmed the session count and history table are accurate, and confirmed Claude's report correctly cited every number from a 5-session table with zero errors after the table-format fix. Also found and fixed a real race condition along the way: `page.tsx` was firing the session-log write before awaiting `diagnose`, so a fast Redis write could complete before `diagnose`'s history fetch ran, making a session see itself as its own prior. Fixed by reordering so `diagnose` always runs first.
+
+**Infra note**: switched from Redis Cloud to a local Homebrew-installed Redis instance (`REDIS_URL=redis://localhost:6379`) after the cloud instance showed repeated `ETIMEDOUT` errors (including one that silently dropped a real session write). Local Redis has been completely stable. Worth deciding before the demo whether to stay local (simpler, no internet dependency) or move back to cloud (more "real" for judges) — `redis.ts` now also has keep-alive + auto-reconnect-on-error handling either way.
 
 ---
 
