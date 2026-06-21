@@ -80,7 +80,8 @@ const DIBELS_EOY: Record<number, number> = {
   1: 71, 2: 107, 3: 124, 4: 133, 5: 142,
   6: 142, 7: 146, 8: 151, 9: 153, 10: 155, 11: 157, 12: 160
 }
-const ACCURACY_THRESHOLD = 96 // DIBELS 8th Edition
+const ACCURACY_INDEPENDENT  = 95  // DIBELS/IEP independent reading level — advance threshold
+const ACCURACY_INSTRUCTIONAL = 90  // DIBELS/IEP instructional level — retry threshold
 
 interface DiagnoseRequest {
   metrics: Metrics
@@ -109,8 +110,11 @@ function resolveBench(grade: number, targetWCPM?: number): Bench {
 }
 
 function getTier(wcpm: number, accuracy: number, bench: Bench): Tier {
-  if (wcpm < bench.strategic || accuracy < 91) return 'intensive'
-  if (wcpm < bench.green || accuracy < ACCURACY_THRESHOLD) return 'strategic'
+  // Frustration level: accuracy below instructional OR WCPM below 80% of benchmark
+  if (accuracy < ACCURACY_INSTRUCTIONAL || wcpm < bench.green * 0.80) return 'intensive'
+  // Instructional level: accuracy below independent OR WCPM below 90% of benchmark
+  if (accuracy < ACCURACY_INDEPENDENT || wcpm < bench.green * 0.90) return 'strategic'
+  // Independent level: accuracy ≥ 95% AND WCPM ≥ 90% of benchmark → advance
   return 'core'
 }
 
@@ -192,8 +196,10 @@ Rules for the report field:
 - Refer to the reader as "the student" — never use character names from the passage${longitudinalRule}
 
 Rules for recommendation:
-- "advance": tier is "core" → student is ready for harder material
-- "retry": tier is "strategic" or "intensive" → not ready to move on, practice this passage again
+- "advance": tier is "core" (accuracy ≥ 95% AND WCPM ≥ 90% of benchmark) → student is ready for harder material
+- "retry": tier is "strategic" (accuracy 90–94% OR WCPM 80–89% of benchmark) → targeted support needed
+- "retry": tier is "intensive" (accuracy < 90% OR WCPM < 80% of benchmark) → intervention needed
+- Self-correction rate does NOT override the tier — do not downgrade "advance" to "retry" based on self-correction rate alone
 
 Rules for reasoning:
 - One sentence citing the specific numbers and tier that drove the recommendation
@@ -205,9 +211,9 @@ ${passageContext}
 WCPM (DIBELS 8th Ed. tiers — strategic: ${bench.strategic}, green/benchmark: ${bench.green}, blue/above benchmark: ${bench.blue}):
 - Student: ${wcpm} WCPM
 
-ACCURACY (DIBELS 8th Edition threshold: ${ACCURACY_THRESHOLD}%; standard reading-level taxonomy for context):
+ACCURACY (IEP/DIBELS reading levels):
 - Student: ${accuracy}%
-- ≥ 95% = independent level | 90–94% = instructional level | < 90% = frustration level
+- ≥ 95% = independent level (advance) | 90–94% = instructional level (retry) | < 90% = frustration level (retry)
 
 ERROR TAXONOMY:
 - Substitutions: ${errorCounts.substitutions} (decoding breakdown — wrong word read)
