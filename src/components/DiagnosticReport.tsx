@@ -1,5 +1,6 @@
 'use client'
 
+import { ReactNode } from 'react'
 import { ErrorType, Recommendation, HistoryPoint, NextPassageRecommendation } from '@/lib/types'
 
 export interface DiagnosticReportProps {
@@ -14,6 +15,7 @@ export interface DiagnosticReportProps {
   onAdvance: () => void
   onRetry: () => void
   onAcceptRecommendation: () => void
+  mapNode?: ReactNode
 }
 
 const ERROR_TYPE_CONFIG: Record<ErrorType, { label: string; badge: string }> = {
@@ -101,7 +103,7 @@ function NextPassageCard({ nextPassage, onAccept }: { nextPassage: NextPassageRe
   )
 }
 
-export default function DiagnosticReport({ report, errorType, recommendation, reasoning, selfCorrections, selfCorrectionRate, history, nextPassage, onAdvance, onRetry, onAcceptRecommendation }: DiagnosticReportProps) {
+export default function DiagnosticReport({ report, errorType, recommendation, reasoning, selfCorrections, selfCorrectionRate, history, nextPassage, onAdvance, onRetry, onAcceptRecommendation, mapNode }: DiagnosticReportProps) {
   const config = ERROR_TYPE_CONFIG[errorType]
   const paragraphs = report.split(/\n\n+/).filter(p => p.trim().length > 0)
   const isAdvance = recommendation === 'advance'
@@ -144,41 +146,63 @@ export default function DiagnosticReport({ report, errorType, recommendation, re
       </div>
 
       <div className="mt-6 pt-5 border-t border-slate-100">
-        {nextPassage && <NextPassageCard nextPassage={nextPassage} onAccept={onAcceptRecommendation} />}
+        <div className="flex gap-5 items-start">
+          {/* Left: recommendation card + reasoning + action buttons */}
+          <div className="flex-1 min-w-0 flex flex-col gap-4">
+            {nextPassage && <NextPassageCard nextPassage={nextPassage} onAccept={onAcceptRecommendation} />}
 
-        <p className="text-xs text-slate-400 mb-3">{reasoning}</p>
+            <p className="text-xs text-slate-400">{reasoning}</p>
 
-        {isAdvance ? (
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={onAdvance}
-              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors"
-            >
-              Next passage →
-            </button>
-            <button
-              onClick={onRetry}
-              className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              or redo this passage
-            </button>
+            {isAdvance ? (
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={onAdvance}
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors"
+                >
+                  Next passage →
+                </button>
+                <button
+                  onClick={onRetry}
+                  className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  or redo this passage
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={onRetry}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors"
+                >
+                  Try again
+                </button>
+                <button
+                  onClick={onAdvance}
+                  className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  or advance to next passage anyway →
+                </button>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={onRetry}
-              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors"
-            >
-              Try again
-            </button>
-            <button
-              onClick={onAdvance}
-              className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              or advance to next passage anyway →
-            </button>
-          </div>
-        )}
+
+          {/* Right: map + legend */}
+          {mapNode && (
+            <div className="shrink-0">
+              {mapNode}
+              <div className="flex gap-4 mt-2 text-xs text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: '#2563eb' }} />
+                  Current
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border-2 inline-block" style={{ borderColor: '#16a34a', borderStyle: 'dashed' }} />
+                  Recommended
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
     </>

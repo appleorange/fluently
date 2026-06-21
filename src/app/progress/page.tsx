@@ -173,8 +173,8 @@ export default function ProgressPage() {
     return (
       <main className="min-h-screen bg-slate-50">
         <div className="max-w-6xl mx-auto px-6 py-16">
-          <h1 className="text-3xl font-bold text-slate-800 mb-1">Progress</h1>
-          <p className="text-slate-400 mb-12">Your reading history and trend charts appear here.</p>
+          <h1 className="text-2xl font-bold text-slate-800 mb-1">Progress</h1>
+          <p className="text-sm text-slate-400 mb-12">Your reading history and trend charts appear here.</p>
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 flex flex-col items-center text-center max-w-md mx-auto">
             <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-6">
@@ -218,8 +218,8 @@ export default function ProgressPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-bold text-slate-800 mb-1">Progress</h1>
-        <p className="text-slate-400 mb-8">{sessions.length} sessions recorded</p>
+        <h1 className="text-2xl font-bold text-slate-800 mb-1">Progress</h1>
+        <p className="text-sm text-slate-400 mb-8">{sessions.length} sessions recorded</p>
 
         {/* Summary stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
