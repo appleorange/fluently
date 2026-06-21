@@ -24,9 +24,15 @@ function gradeFromComplexity(c: number): number {
   return Math.max(1, Math.round(1 + c * 11))
 }
 
+// DIBELS 8th Edition end-of-year "at benchmark" WCPM targets
+const DIBELS_EOY: Record<number, number> = {
+  1: 71, 2: 107, 3: 124, 4: 133, 5: 142,
+  6: 142, 7: 146, 8: 151, 9: 153, 10: 155, 11: 157, 12: 160
+}
+
 function wcpmFromComplexity(c: number): number {
-  // Benchmark: K≈60, grade 4≈110, grade 8≈150, adult≈200
-  return Math.round(60 + c * 140)
+  const grade = gradeFromComplexity(c)
+  return DIBELS_EOY[Math.min(grade, 12)] ?? 160
 }
 
 export async function POST(request: Request) {

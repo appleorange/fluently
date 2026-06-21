@@ -15,9 +15,9 @@ function wcpmColor(wcpm: number, target: number): string {
 }
 
 function accuracyColor(accuracy: number): string {
-  if (accuracy >= 95) return 'text-green-600'
-  if (accuracy >= 85) return 'text-yellow-600'
-  return 'text-red-600'
+  if (accuracy >= 95) return 'text-green-600'   // independent level
+  if (accuracy >= 90) return 'text-yellow-600'  // instructional level
+  return 'text-red-600'                          // frustration level
 }
 
 function boundaryColor(pct: number): string {

@@ -3,16 +3,17 @@ import { Metrics, Recommendation } from '@/lib/types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const BENCHMARKS: Record<number, { wcpmLow: number; wcpmHigh: number }> = {
-  2: { wcpmLow: 90,  wcpmHigh: 110 },
-  4: { wcpmLow: 125, wcpmHigh: 145 },
-  6: { wcpmLow: 150, wcpmHigh: 170 },
+// DIBELS 8th Edition end-of-year "at benchmark" WCPM targets (fallback when targetWCPM absent)
+const DIBELS_EOY: Record<number, number> = {
+  1: 71, 2: 107, 3: 124, 4: 133, 5: 142,
+  6: 142, 7: 146, 8: 151, 9: 153, 10: 155, 11: 157, 12: 160
 }
 
 interface DiagnoseRequest {
   metrics: Metrics
   passageGrade: number
   passageTitle: string
+  targetWCPM?: number  // from generate-passage; use this for benchmark when present
   complexity?: number  // 0-1, present for AI-generated passages
   register?: number    // 0-1, present for AI-generated passages
 }
@@ -38,20 +39,22 @@ function registerContext(r: number): string {
 function buildPrompt(
   metrics: Metrics,
   grade: number,
+  bench: { wcpmLow: number; wcpmHigh: number },
   wcpmStatus: string,
   accuracyStatus: string,
   complexity?: number,
   register?: number
 ): string {
   const { wcpm, accuracy, errorCounts, pausePlacement, selfCorrections } = metrics
-  const bench = BENCHMARKS[grade] ?? { wcpmLow: grade * 30 + 50, wcpmHigh: grade * 30 + 70 }
+  const totalErrors = errorCounts.substitutions + errorCounts.omissions + errorCounts.insertions
+  const scRate = totalErrors > 0 ? Math.round((selfCorrections / totalErrors) * 100) : 0
 
   const passageContext = (complexity !== undefined && register !== undefined)
     ? `- Passage complexity: ${complexityContext(complexity)}
 - Passage register: ${registerContext(register)}`
     : `- Grade ${grade} passage`
 
-  return `You are a reading specialist analyzing a child's oral reading fluency assessment.
+  return `You are a reading specialist analyzing a child's oral reading fluency assessment. Use DIBELS 8th Edition and NAEP standards as your clinical reference.
 
 Return ONLY a JSON object — no markdown, no explanation, nothing else — in exactly this shape:
 {"report":"...","recommendation":"advance"|"retry"|"repeat","reasoning":"..."}
@@ -60,28 +63,44 @@ Rules for the report field:
 - Plain-language diagnostic for a parent or teacher, under 150 words
 - First sentence states the key finding
 - Distinguish DECODING issues (wrong words) from PHRASING FLUENCY issues (poor pausing)
-- Calibrate your feedback to the passage register — e.g. for a very casual passage, some informality from the reader is expected; for a formal passage, precision matters more
-- Give 1-2 specific actionable exercises
+- Calibrate your feedback to the passage register — for casual passages some informality is normal; for formal passages, precision matters more
+- If self-correction rate > 20%, open with praise for metacognitive monitoring before addressing errors
+- Give 1-2 specific, actionable exercises matched to the primary error type
 - Warm and encouraging tone, not clinical
 - Refer to the reader as "the student" — never use character names from the passage
 
 Rules for recommendation:
 - "advance": wcpmStatus is "at benchmark" AND accuracyStatus is "passing" → student is ready for harder material
-- "repeat": wcpmStatus is "at benchmark" BUT accuracyStatus is "below threshold" → speed is fine but accuracy needs work, try a different passage at same level
-- "retry": wcpmStatus is "below benchmark" → not ready to move on, practice this passage again
+- "repeat": wcpmStatus is "at benchmark" BUT accuracyStatus is "below threshold" → speed fine but accuracy needs work; try a different passage at same level
+- "retry": wcpmStatus is "below benchmark" → not ready to move on; practice this passage again
 
 Rules for reasoning:
-- One sentence explaining the recommendation, referencing the specific numbers
+- One sentence citing the specific numbers that drove the recommendation
 
 ASSESSMENT DATA:
 ${passageContext}
-- WCPM benchmark: ${bench.wcpmLow}–${bench.wcpmHigh}, accuracy threshold: 95%
-- WCPM: ${wcpm} → wcpmStatus: "${wcpmStatus}"
-- Accuracy: ${accuracy}% → accuracyStatus: "${accuracyStatus}"
-- Substitutions: ${errorCounts.substitutions}, Omissions: ${errorCounts.omissions}, Insertions: ${errorCounts.insertions}
-- Hesitations: ${errorCounts.hesitations} (pauses >500ms)
-- Self-corrections: ${selfCorrections}
-- Pause placement: ${pausePlacement.boundaryPercent}% at natural phrase boundaries (below 50% = phrasing issue)`
+
+WCPM (DIBELS 8th Ed. EOY "at benchmark" range for this level):
+- Benchmark range: ${bench.wcpmLow}–${bench.wcpmHigh} WCPM
+- Student: ${wcpm} WCPM → wcpmStatus: "${wcpmStatus}"
+- Interpretation: ≥ benchmark = adequate progress; 80–89% = some risk; < 80% = at risk
+
+ACCURACY (standard reading-level taxonomy):
+- Student: ${accuracy}% → accuracyStatus: "${accuracyStatus}"
+- ≥ 95% = independent level | 90–94% = instructional level | < 90% = frustration level
+
+ERROR TAXONOMY:
+- Substitutions: ${errorCounts.substitutions} (decoding breakdown — wrong word read)
+- Omissions: ${errorCounts.omissions} (skipped expected word)
+- Insertions: ${errorCounts.insertions} (added word not in text)
+- Hesitations: ${errorCounts.hesitations} (pause > 500 ms, not counted as errors)
+- Self-corrections: ${selfCorrections} of ${totalErrors} errors corrected (${scRate}% self-correction rate)
+  → Self-corrections signal active metacognitive monitoring; ≥ 20% rate is a meaningful strength
+
+PROSODIC FLUENCY (NAEP Oral Reading Fluency rubric proxy):
+- ${pausePlacement.boundaryPercent}% of pauses at syntactic phrase boundaries (${pausePlacement.atBoundary} of ${pausePlacement.totalPauses} pauses)
+- ≥ 75% = fluent prosody (NAEP Level 3–4) | 50–74% = developing (Level 2–3) | < 50% = phrasing issue (Level 1–2)
+- Phrasing issue flag: ${pausePlacement.boundaryPercent < 50 ? 'YES — mid-phrase pauses dominate' : 'no'}`
 }
 
 function parseRecommendation(raw: string): Recommendation {
@@ -92,13 +111,15 @@ function parseRecommendation(raw: string): Recommendation {
 export async function POST(request: Request) {
   try {
     const body: DiagnoseRequest = await request.json()
-    const { metrics, passageGrade, complexity, register } = body
+    const { metrics, passageGrade, targetWCPM, complexity, register } = body
 
     if (!metrics) {
       return Response.json({ error: 'Missing metrics' }, { status: 400 })
     }
 
-    const bench = BENCHMARKS[passageGrade] ?? { wcpmLow: passageGrade * 30 + 50, wcpmHigh: passageGrade * 30 + 70 }
+    const dibelsTarget = DIBELS_EOY[Math.min(Math.max(passageGrade, 1), 12)] ?? 160
+    const target = targetWCPM ?? dibelsTarget
+    const bench = { wcpmLow: Math.round(target * 0.9), wcpmHigh: Math.round(target * 1.1) }
     const wcpmStatus = metrics.wcpm >= bench.wcpmLow ? 'at benchmark' : 'below benchmark'
     const accuracyStatus = metrics.accuracy >= 95 ? 'passing' : 'below threshold'
 
@@ -106,7 +127,7 @@ export async function POST(request: Request) {
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       messages: [
-        { role: 'user', content: buildPrompt(metrics, passageGrade, wcpmStatus, accuracyStatus, complexity, register) }
+        { role: 'user', content: buildPrompt(metrics, passageGrade, bench, wcpmStatus, accuracyStatus, complexity, register) }
       ]
     })
 
