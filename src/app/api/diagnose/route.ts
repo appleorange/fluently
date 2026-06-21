@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getRedis } from '@/lib/redis'
+import { computeNextTarget, findNearestPassage, weakestDimensionLabel, type StoredPassage } from '@/lib/passageVectors'
+import { generatePassage } from '@/lib/generatePassage'
 import { Metrics, Recommendation } from '@/lib/types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -84,10 +86,12 @@ interface DiagnoseRequest {
   metrics: Metrics
   passageGrade: number
   passageTitle: string
+  passageId?: string    // present for AI-generated passages; excluded from next-passage matching
   targetWCPM?: number  // from generate-passage; preferred benchmark source when present
   readerId?: string     // present once page.tsx has generated/loaded a persistent reader identity
   complexity?: number  // 0-1, present for AI-generated passages
   register?: number    // 0-1, present for AI-generated passages
+  skillVector?: number[] // from computeSkillVector; drives the next-passage recommendation
 }
 
 type Tier = 'intensive' | 'strategic' | 'core'
@@ -148,6 +152,7 @@ function buildPrompt(
   tier: Tier,
   tierLabel: string,
   priorSessions: SessionDoc[],
+  nextPassageBlurb: string,
   complexity?: number,
   register?: number
 ): string {
@@ -214,7 +219,7 @@ ERROR TAXONOMY:
 
 PROSODIC FLUENCY (NAEP Oral Reading Fluency rubric proxy):
 - ${pausePlacement.boundaryPercent}% of pauses at syntactic phrase boundaries (${pausePlacement.atBoundary} of ${pausePlacement.totalPauses} pauses)
-- ≥ 75% = fluent prosody (NAEP Level 3–4) | 50–74% = developing (Level 2–3) | < 50% = phrasing issue (Level 1–2)${longitudinalContext(priorSessions, metrics)}`
+- ≥ 75% = fluent prosody (NAEP Level 3–4) | 50–74% = developing (Level 2–3) | < 50% = phrasing issue (Level 1–2)${longitudinalContext(priorSessions, metrics)}${nextPassageBlurb}`
 }
 
 function parseRecommendation(raw: string): Recommendation {
@@ -225,7 +230,7 @@ function parseRecommendation(raw: string): Recommendation {
 export async function POST(request: Request) {
   try {
     const body: DiagnoseRequest = await request.json()
-    const { metrics, passageGrade, targetWCPM, readerId, complexity, register } = body
+    const { metrics, passageGrade, passageId, targetWCPM, readerId, complexity, register, skillVector } = body
 
     if (!metrics) {
       return Response.json({ error: 'Missing metrics' }, { status: 400 })
@@ -233,14 +238,49 @@ export async function POST(request: Request) {
 
     const bench = resolveBench(passageGrade, targetWCPM)
     const tier = getTier(metrics.wcpm, metrics.accuracy, bench)
-    const { tierLabel } = recommendationForTier(tier, metrics.wcpm, bench)
+    const { recommendation: tierRecommendation, tierLabel } = recommendationForTier(tier, metrics.wcpm, bench)
     const priorSessions = readerId ? await fetchPriorSessions(readerId) : []
+
+    let nextPassageBlurb = ''
+    let nextPassage: {
+      target: { complexity: number; register: number }
+      recommended: (StoredPassage & { matchSource: 'existing' | 'generated' }) | null
+      weakestDimension: string
+    } | null = null
+
+    if (skillVector && complexity !== undefined && register !== undefined) {
+      const target = computeNextTarget(skillVector, tierRecommendation, complexity, register)
+      const weakest = weakestDimensionLabel(skillVector)
+
+      let existing = await findNearestPassage(target)
+      if (existing && existing.passageId === passageId) existing = null // don't recommend the passage just read
+
+      let recommended: (StoredPassage & { matchSource: 'existing' | 'generated' }) | null = null
+      if (existing) {
+        recommended = { ...existing, matchSource: 'existing' }
+      } else {
+        try {
+          const generated = await generatePassage(target.complexity, target.register)
+          recommended = { ...generated, matchSource: 'generated' }
+        } catch (err) {
+          console.error('Failed to auto-generate recommended next passage:', err)
+        }
+      }
+
+      nextPassage = { target, recommended, weakestDimension: weakest }
+      nextPassageBlurb = `
+
+NEXT PASSAGE RECOMMENDATION:
+- This reader's weakest dimension this session: ${weakest}
+- Optimal next passage target: ${complexityContext(target.complexity)}, ${registerContext(target.register)}${recommended ? `\n- Recommended passage: "${recommended.title}"` : ''}
+- Briefly reference this in your reasoning — why this next target follows from today's pattern.`
+    }
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       messages: [
-        { role: 'user', content: buildPrompt(metrics, passageGrade, bench, tier, tierLabel, priorSessions, complexity, register) }
+        { role: 'user', content: buildPrompt(metrics, passageGrade, bench, tier, tierLabel, priorSessions, nextPassageBlurb, complexity, register) }
       ]
     })
 
@@ -249,10 +289,17 @@ export async function POST(request: Request) {
     const jsonStr = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
     const parsed = JSON.parse(jsonStr)
 
+    const history = [
+      ...priorSessions.map(s => ({ wcpm: s.metrics.wcpm, accuracy: s.metrics.accuracy, timestamp: s.timestamp })),
+      { wcpm: metrics.wcpm, accuracy: metrics.accuracy, timestamp: Date.now() }
+    ]
+
     return Response.json({
       report: parsed.report ?? '',
       recommendation: parseRecommendation(parsed.recommendation),
-      reasoning: parsed.reasoning ?? ''
+      reasoning: parsed.reasoning ?? '',
+      nextPassage,
+      history: history.length > 1 ? history : []
     })
   } catch (error) {
     console.error('Diagnose API error:', error)

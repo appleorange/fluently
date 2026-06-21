@@ -127,57 +127,46 @@ Goal: reliable, beautiful demo for judges
 Core concept: Redis vector search finds the optimal next passage across both complexity and register axes simultaneously, based on the reader's current error profile. This is not "find a harder passage" — it's "find the passage in our 2D skill space that targets your specific weak points."
 
 #### Setup
-- [ ] Sign up for Redis Cloud at redis.io/try-free (free tier)
-- [ ] Install `@redis/client`
-- [ ] Add `REDIS_URL` to `.env.local` and `.env.example`
-- [ ] Create `src/lib/redis.ts` — initialize client, verify connection
+- [x] Redis instance running — switched from Redis Cloud to local **Redis Stack** (`brew install redis-stack-server`, not plain `redis`) after (1) Redis Cloud showed repeated `ETIMEDOUT` errors including one that silently dropped a real session write, and (2) plain Homebrew `redis` doesn't include the RediSearch module needed for `FT.CREATE`/vector search at all — only Redis Stack or managed Redis Cloud bundle it. Started manually (not via `brew services`, since cask services aren't managed that way) — needs a manual restart if the machine reboots.
+- [x] Install `redis` (the original spec said `@redis/client`, but that's the bare core client — vector search (`.ft.create`/`.ft.search`) requires the full `redis` package, which bundles the search module)
+- [x] Add `REDIS_URL` to `.env.local` and `.env.example` (currently `redis://localhost:6379`)
+- [x] Create `src/lib/redis.ts` — singleton client with keep-alive + auto-reconnect-on-error (added after live testing surfaced real connection drops)
 
 #### Passage vector index
-- [ ] Create `src/lib/passageVectors.ts` — defines the vector schema for each passage:
+- [x] Create `src/lib/passageVectors.ts`. **Simplified from the original 7-field schema** to just what's actually used:
   ```
   {
     passageId: string,
-    complexity: number,        // 0-1 Flesch-Kincaid normalized
-    register: number,          // 0-1 casual→formal
-    avgSentenceLength: number,
-    latinateRatio: number,     // Latinate vocab density
-    functionWordDensity: number,
-    syntacticDepth: number,    // from compromise.js
-    targetWCPM: number,
-    tolerances: {
-      substitution: number,    // acceptable error rate for this passage
-      omission: number,
-      pausePlacement: number   // target boundary hit rate
-    }
+    title: string,
+    complexity: number,   // 0-1
+    register: number,     // 0-1
+    vector: [complexity, register]   // 2D, not the originally-sketched 5D — see note below
   }
   ```
-- [ ] Pre-compute vectors for all 9 PassageMap passages and seed Redis on app startup if index doesn't exist
-- [ ] Create HNSW vector index in Redis on the passage vector fields
+  The vector is 2D rather than 5D because the recommendation logic (below) only ever moves along the complexity/register axes — the other 3 skill dimensions (wcpm/pause/self-correction) have no corresponding PassageMap axis, so a 5D passage vector would carry 3 dimensions nothing ever searches on.
+- [x] No fixed "9 passages" to pre-seed — Phase 5 replaced the fixed grid with infinite on-demand generation. Instead, `generate-passage/route.ts` stores each passage's vector incrementally, fire-and-forget, the moment it's created. The library grows as more passages get generated; KNN search runs against whatever's accumulated so far.
+- [x] Index uses **FLAT** not HNSW (HNSW is for >1M vectors; this library will have at most a few hundred). Found and fixed a real bug during testing: the schema initially only declared `complexity`/`register`/`vector` fields, so `FT.SEARCH`'s `RETURN` couldn't fetch `passageId`/`title` (came back as literal `"undefined"` strings) — fixed by adding explicit TEXT schema fields for them.
+- [x] **Verified live**: ran a real session, confirmed the generated passage's vector landed in Redis correctly, confirmed `FT.SEARCH` KNN correctly found it as the nearest match to its own coordinates, and confirmed it correctly returns `null` when nothing is within a useful distance (~0.1) of the target.
 
 #### Session error profile vector
-- [ ] Create `src/lib/sessionVector.ts` — derives a reader's current skill vector from session metrics:
-  ```
-  {
-    complexityHandling: number,   // derived from error rate on polysyllabic words
-    registerHandling: number,     // derived from function word error rate
-    wcpmPercentile: number,       // WCPM relative to grade benchmark
-    pausePlacementScore: number,  // % pauses at syntactic boundaries
-    dominantErrorType: string,    // substitution | omission | insertion | hesitation
-    selfCorrectionRate: number
-  }
-  ```
-- [ ] The "optimal next passage" vector is computed as: current skill vector + a small step in the direction of weakest dimension. If `registerHandling` is lowest, step right on Y axis. If `complexityHandling` is lowest, stay on X axis. Never step in both directions simultaneously.
+- [x] `src/lib/sessionVector.ts`'s `computeSkillVector` (built in an earlier round) — 5 dimensions: `[complexityHandling, registerHandling, wcpmPercentile, pausePlacementScore, selfCorrectionRate]`. No `dominantErrorType` field was added — `weakestDimensionLabel()` in `passageVectors.ts` covers the same need (identify the weakest dimension) without a separate categorical field.
+- [x] "Optimal next passage" target logic resolved two open design questions the original spec didn't address, per user decision:
+  1. **Non-map-axis weakness** (wcpm/pause/self-correction is weakest): target stays at the current passage's exact position — no fake heuristic mapping onto complexity/register, since there's no real relationship to encode. Claude's existing exercise recommendations address it directly instead.
+  2. **Direction of movement**: only escalate (step further into the weak axis) when the session's recommendation was "advance." On "retry," stay put — more reps at the same difficulty, not a harder version of what they're already struggling with.
+  - Implemented as `computeNextTarget()` in `passageVectors.ts`, hand-verified against 5 scenarios (escalate complexity, escalate register, non-map weakness stays put, retry stays put, escalation clamps at 1.0) — all matched exactly.
 
 #### KNN search
-- [ ] After each session, compute the session error profile vector and the optimal next passage vector
-- [ ] Run KNN search (k=3) against the passage index to find the 3 closest passages to the optimal next vector
-- [ ] Return the top match as the recommended next passage
-- [ ] Pass to Claude in the diagnostic prompt: "Based on this reader's error profile, the optimal next passage is [title] — it targets [specific weakness] while keeping [strength dimension] stable"
+- [x] After each session, compute the skill vector and the optimal next-passage target (`diagnose/route.ts`)
+- [x] Run KNN search against the passage index for the single closest match (simplified from k=3 — only the top match is ever used, so there was no reason to fetch and discard two more)
+- [x] Pass the recommendation to Claude in the diagnostic prompt, including the nearest existing match's title when one is found within a useful distance
+- [x] **Verified live end-to-end**: hit the real `/api/diagnose` route with real session data. Confirmed the response correctly included the computed target, the matched existing passage, and confirmed Claude's own generated reasoning explicitly referenced the right thing — *"directly targeting the one dimension — self-correction rate — that has shown zero growth across both sessions."*
+- [x] Auto-generate a fresh passage when no close match exists — extracted the passage-generation logic out of `generate-passage/route.ts` into a shared `src/lib/generatePassage.ts` so `diagnose/route.ts` can call it directly (no internal HTTP round-trip). `findNearestPassage` now also fetches the *full* stored passage (text/words/grade/targetWCPM), not just the search-indexed fields, via a follow-up `JSON.GET` — needed so an "existing" match can actually be served to the reader without regenerating. Also excludes the passage just read from counting as its own recommendation.
+- [x] **Verified live** (2026-06-20): ran a real session whose weakest dimension was `pausePlacementScore` (non-map-axis) — confirmed the target correctly stayed at the current passage's exact position, confirmed KNN correctly rejected the one other existing passage (too far, ~0.34 distance vs. the 0.1 threshold), and confirmed the auto-generated fallback passage landed at the *exact* target coordinates.
 
 #### Agent memory
 - [x] Generate persistent `readerId` via `crypto.randomUUID()` stored in localStorage — `page.tsx`
 - [x] Store each session's error profile vector + metrics in Redis — exact schema below. Implemented in `src/lib/redis.ts` (singleton client), `src/lib/sessionVector.ts` (pure `computeSkillVector`, offline-verified by hand), `src/app/api/session/route.ts` (writes `reader:{readerId}:sessions:{sessionId}` + appends to `reader:{readerId}:sessionIndex`, both TTL 30 days). **Live-verified** (2026-06-20): ran a real session, confirmed the actual Redis document and index list match the schema exactly. This same mechanism also satisfies the "Longitudinal error tracking" storage bullets below — see note there.
-- [ ] On each new session fetch full history — if `sessionCount >= 3` switch Claude to longitudinal prompt mode (deferred to Round 2 — `/api/session` already returns `sessionCount` in its response, ready for `diagnose/route.ts` to consume)
+- [x] On each new session fetch full history and switch Claude prompt mode accordingly — implemented as 3 modes (snapshot/comparison/pattern-recognition), not just a single `>= 3` cutoff. See "Longitudinal error tracking" below for the implementation and live-verification notes.
 
 **Exact Redis storage schema:**
 
@@ -249,31 +238,39 @@ Two data structures per reader:
 ]
 ```
 
-Passage vectors seeded once at startup, stored as:
+**Note**: this example schema is the original spec — actual implementation diverged (see "Passage vector index" above). Passages are not pre-seeded; each one is stored incrementally the moment `generate-passage` creates it, and the vector is 2D (`[complexity, register]`) rather than 5D, since the recommendation logic only ever searches on those two axes. Actual shape:
 
 `passage:{passageId}` →
 ```json
 {
-  "passageId": "grade4-formal",
-  "title": "The Observatory",
-  "complexity": 0.6,
-  "register": 0.8,
-  "vector": [0.6, 0.8, 0.71, 0.82, 0.34]
+  "passageId": "uuid",
+  "title": "The Saturday Market",
+  "complexity": 0.37,
+  "register": 0.32,
+  "text": "...",
+  "words": ["Every", "Saturday", ...],
+  "grade": 5,
+  "targetWCPM": 142,
+  "source": "AI Generated",
+  "vector": [0.37, 0.32]
 }
 ```
 
 #### UI updates
-- [ ] After `DiagnosticReport` renders, show "Your next passage" card: title, complexity/register position on a mini 2D grid, and one sentence from Claude explaining why this passage was chosen
-- [ ] Show the reader's current position on the PassageMap 2D canvas and the recommended next position as an arrow
+- [x] `DiagnosticReport.tsx` — "Your next passage" card (title + plain-language complexity/register descriptors + weakest dimension, "Read this passage →" button that loads the recommendation directly via `handleAcceptRecommendation` in `page.tsx`, no regeneration needed). Skipped the literal "mini 2D grid" — the PassageMap arrow below already shows position visually, a second mini-map would be redundant.
+- [x] `PassageMap.tsx` — `recommendedPosition` prop draws a dashed blue arrow + arrowhead from the current pin to the recommended position, only when they differ meaningfully (>6px)
+- [x] `DiagnosticReport.tsx` — "Reading history" timeline (WCPM/accuracy per session with ↑/↓/→ trend arrows vs. the previous session), shown whenever 2+ sessions exist (not gated to exactly "3+" like the original spec — the data is just as valid at 2, comparison mode already explains it)
+- [x] **Verified**: visually confirmed all three (arrow, history, card) render correctly with mock data via a temporary test route + screenshots, confirmed the card's accept button fires correctly, then confirmed the full real-data path end-to-end via the live session above (3rd passage in the index, 2 sessions in history)
 
 #### Demo story for judges
 > "Redis isn't caching here. It's powering a real-time vector search across a 2D skill space — complexity and register — to find the pedagogically optimal next reading challenge based on where this reader's errors are concentrated. The recommendation isn't just 'harder' — it's 'harder in the right dimension.'"
 
 #### Verification
-- [ ] Seed all 9 passage vectors into Redis manually, confirm index created
-- [ ] Run a session with high function word errors, confirm recommended next passage moves right on register axis not up on complexity axis
-- [ ] Run a session with high polysyllabic substitutions, confirm recommended next passage stays at current register but reduces complexity
-- [ ] Run 3 sessions with same readerId, confirm Claude shifts to longitudinal language on session 3
+- [x] Confirmed `FT.CREATE` index creation works against real Redis Stack (synthetic test, then live)
+- [x] Confirmed non-map-axis weakness (selfCorrectionRate lowest, then separately pausePlacementScore lowest) correctly keeps the target at the current passage's exact position — both via 2 separate real sessions
+- [x] Confirmed KNN correctly rejects a too-far existing passage and falls through to auto-generation, landing at the exact target coordinates
+- [x] Confirmed 5 real sessions correctly shift Claude's language from snapshot → comparison → pattern-recognition (see "Longitudinal error tracking" below)
+- [ ] **Gap**: map-axis weakness (complexityHandling or registerHandling lowest, with "advance" recommendation) escalating in the right direction has only been verified via `computeNextTarget`'s pure-function hand test — not yet confirmed through a full real session + live `/api/diagnose` call. Worth doing before the demo if there's time, since it's the literal "harder, in the right dimension" headline behavior.
 
 ### Deepgram depth
 - [x] Switched streaming model from `nova-2` to `nova-3` in `src/lib/deepgram.ts` for better transcription accuracy
@@ -295,7 +292,7 @@ Explored using Deepgram's `filler_words` param to distinguish verbal hesitations
 - [x] Generate persistent `readerId` + store each session in Redis — same mechanism as "Agent memory" above (Redis AI Integration section), built once and shared by both roadmap items. See that section for implementation details and live-verification notes.
 - [x] On each new session fetch full history for this `readerId` before calling Claude (`fetchPriorSessions` in `diagnose/route.ts`, gracefully degrades to snapshot mode on any Redis error)
 - [x] Three prompt modes implemented (more granular than the original 2-mode spec): **snapshot** (0 prior sessions, unchanged existing behavior), **comparison** (1 prior — explicit "what improved/regressed" framing), **pattern-recognition** (2+ priors — persisting/worsening/resolving language). History is passed to Claude as a markdown table (WCPM/accuracy/error counts/boundary%/self-correction% per session) rather than prose lines — switched after an early test showed Claude misstating a historical number; the table + an explicit "re-read every number from the table, don't recall from memory" instruction fixed it.
-- [ ] Update `DiagnosticReport.tsx` — after 3+ sessions show a "Reading history" section above the current report with a simple timeline of WCPM and accuracy across sessions with trend arrows
+- [x] Update `DiagnosticReport.tsx` — "Reading history" timeline. Built and verified — see "UI updates" in the Redis AI Integration section above (built together with the next-passage card since both render in the same component).
 - [x] **Verified live** (2026-06-20): ran 5 real sessions in sequence. Confirmed snapshot → comparison → pattern-recognition mode switches correctly at each threshold, confirmed the session count and history table are accurate, and confirmed Claude's report correctly cited every number from a 5-session table with zero errors after the table-format fix. Also found and fixed a real race condition along the way: `page.tsx` was firing the session-log write before awaiting `diagnose`, so a fast Redis write could complete before `diagnose`'s history fetch ran, making a session see itself as its own prior. Fixed by reordering so `diagnose` always runs first.
 
 **Infra note**: switched from Redis Cloud to a local Homebrew-installed Redis instance (`REDIS_URL=redis://localhost:6379`) after the cloud instance showed repeated `ETIMEDOUT` errors (including one that silently dropped a real session write). Local Redis has been completely stable. Worth deciding before the demo whether to stay local (simpler, no internet dependency) or move back to cloud (more "real" for judges) — `redis.ts` now also has keep-alive + auto-reconnect-on-error handling either way.

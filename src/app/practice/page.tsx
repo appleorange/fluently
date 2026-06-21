@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse, Recommendation } from '@/lib/types'
+import { SessionState, WordTimestamp, AlignedWord, Metrics, Passage, WordStatus, DiagnosticResponse, Recommendation, HistoryPoint, NextPassageRecommendation } from '@/lib/types'
 import AudioRecorder from '@/components/AudioRecorder'
 import PassageDisplay from '@/components/PassageDisplay'
 import DiagnosticReport from '@/components/DiagnosticReport'
@@ -43,6 +43,8 @@ export default function PracticePage() {
   const [reasoning, setReasoning] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [timerSeconds, setTimerSeconds] = useState(0)
+  const [nextPassage, setNextPassage] = useState<NextPassageRecommendation | null>(null)
+  const [history, setHistory] = useState<HistoryPoint[]>([])
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const passageRef = useRef<Passage | null>(null)
@@ -91,6 +93,8 @@ export default function PracticePage() {
       setReport('')
       setRecommendation('retry')
       setReasoning('')
+      setNextPassage(null)
+      setHistory([])
     } catch {
       setError('Failed to generate passage. Please try again.')
     } finally {
@@ -171,6 +175,9 @@ export default function PracticePage() {
       const computedMetrics = await computeMetrics(alignedWords, wordStream, currentPassage.text)
       setMetrics(computedMetrics)
 
+      const { computeSkillVector } = await import('@/lib/sessionVector')
+      const skillVector = computeSkillVector(alignedWords, computedMetrics, currentPassage.targetWCPM)
+
       // diagnose must run BEFORE the session gets logged — otherwise a fast Redis write can
       // complete before diagnose's history fetch, making a session see itself as its own prior
       const res = await fetch('/api/diagnose', {
@@ -180,23 +187,23 @@ export default function PracticePage() {
           metrics: computedMetrics,
           passageGrade: currentPassage.grade,
           passageTitle: currentPassage.title,
+          passageId: currentPassage.passageId,
           targetWCPM: currentPassage.targetWCPM,
           readerId: readerIdRef.current,
           complexity: currentPassage.complexity,
-          register: currentPassage.register
+          register: currentPassage.register,
+          skillVector
         })
       })
 
       // Fire-and-forget session log — a failed write shouldn't block the user seeing their report
-      const { computeSkillVector } = await import('@/lib/sessionVector')
-      const skillVector = computeSkillVector(alignedWords, computedMetrics, currentPassage.targetWCPM)
       fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           readerId: readerIdRef.current,
           sessionId: sessionIdRef.current,
-          passageId: `${slugify(currentPassage.title)}-g${currentPassage.grade}`,
+          passageId: currentPassage.passageId ?? `${slugify(currentPassage.title)}-g${currentPassage.grade}`,
           passageGrade: currentPassage.grade,
           passageComplexity: currentPassage.complexity,
           passageRegister: currentPassage.register,
@@ -209,6 +216,8 @@ export default function PracticePage() {
       setReport(data.report)
       setRecommendation(data.recommendation ?? 'retry')
       setReasoning(data.reasoning ?? '')
+      setNextPassage(data.nextPassage ?? null)
+      setHistory(data.history ?? [])
       setSessionState('results')
     } catch {
       setError('Something went wrong. Please try again.')
@@ -249,6 +258,25 @@ export default function PracticePage() {
   const handleRetry = useCallback(() => resetSession(true), [resetSession])
   const handleAdvance = useCallback(() => resetSession(false), [resetSession])
 
+  const handleAcceptRecommendation = useCallback(() => {
+    const recommended = nextPassage?.recommended
+    if (!recommended) return
+    setPassage({
+      passageId: recommended.passageId,
+      title: recommended.title,
+      source: recommended.source,
+      text: recommended.text,
+      words: recommended.words,
+      grade: recommended.grade,
+      targetWCPM: recommended.targetWCPM,
+      complexity: recommended.complexity,
+      register: recommended.register
+    })
+    setMapComplexity(recommended.complexity)
+    setMapRegister(recommended.register)
+    resetSession(true)
+  }, [nextPassage, resetSession])
+
   const isNearEnd = timerSeconds >= 50
   const remaining = SESSION_DURATION - timerSeconds
   const showMap = sessionState === 'idle' || sessionState === 'results'
@@ -283,6 +311,7 @@ export default function PracticePage() {
               isGenerating={isGenerating}
               initialComplexity={mapComplexity}
               initialRegister={mapRegister}
+              recommendedPosition={sessionState === 'results' ? nextPassage?.target ?? null : null}
             />
           </div>
         )}
@@ -365,8 +394,11 @@ export default function PracticePage() {
             reasoning={reasoning}
             selfCorrections={metrics.selfCorrections}
             selfCorrectionRate={metrics.selfCorrectionRate}
+            history={history}
+            nextPassage={nextPassage}
             onAdvance={handleAdvance}
             onRetry={handleRetry}
+            onAcceptRecommendation={handleAcceptRecommendation}
           />
         )}
       </div>

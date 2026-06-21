@@ -7,6 +7,7 @@ interface PassageMapProps {
   isGenerating: boolean
   initialComplexity?: number
   initialRegister?: number
+  recommendedPosition?: { complexity: number; register: number } | null
 }
 
 const SIZE = 360
@@ -18,12 +19,18 @@ export default function PassageMap({
   onGenerate,
   isGenerating,
   initialComplexity = 0.5,
-  initialRegister = 0.5
+  initialRegister = 0.5,
+  recommendedPosition = null
 }: PassageMapProps) {
   const [pos, setPos] = useState({
     x: initialComplexity * SIZE,
     y: (1 - initialRegister) * SIZE
   })
+
+  const recommended = recommendedPosition
+    ? { x: recommendedPosition.complexity * SIZE, y: (1 - recommendedPosition.register) * SIZE }
+    : null
+  const showArrow = recommended && Math.hypot(recommended.x - pos.x, recommended.y - pos.y) > 6
   const dragging = useRef(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -91,6 +98,23 @@ export default function PassageMap({
           <line x1={0} y1={SIZE / 2} x2={SIZE} y2={SIZE / 2} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" style={{ pointerEvents: 'none' }} />
           <text x={6} y={SIZE / 2 - 4} fontSize={10} fill="#94a3b8" textAnchor="start" style={{ pointerEvents: 'none', userSelect: 'none' }}>Easy</text>
           <text x={SIZE - 6} y={SIZE / 2 - 4} fontSize={10} fill="#94a3b8" textAnchor="end" style={{ pointerEvents: 'none', userSelect: 'none' }}>Difficult</text>
+
+          {/* Recommended next position — arrow from current pin, drawn before the pin so the pin sits on top */}
+          {showArrow && recommended && (
+            <>
+              <defs>
+                <marker id="rec-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                  <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb" />
+                </marker>
+              </defs>
+              <line
+                x1={pos.x} y1={pos.y} x2={recommended.x} y2={recommended.y}
+                stroke="#2563eb" strokeWidth={2} strokeDasharray="5 4"
+                markerEnd="url(#rec-arrowhead)" style={{ pointerEvents: 'none' }}
+              />
+              <circle cx={recommended.x} cy={recommended.y} r={5} fill="#2563eb" style={{ pointerEvents: 'none' }} />
+            </>
+          )}
 
           {/* Draggable point */}
           <circle

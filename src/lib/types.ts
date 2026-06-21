@@ -45,6 +45,7 @@ export interface Metrics {
 }
 
 export interface Passage {
+  passageId?: string   // present on AI-generated passages
   grade: number
   title: string
   source: string
@@ -66,3 +67,28 @@ export interface DiagnosticResponse {
 }
 
 export type SessionState = 'idle' | 'recording' | 'processing' | 'results'
+
+export interface HistoryPoint {
+  wcpm: number
+  accuracy: number
+  timestamp: number
+}
+
+export interface RecommendedPassage {
+  passageId: string
+  title: string
+  complexity: number
+  register: number
+  text: string
+  words: string[]
+  grade: number
+  targetWCPM: number
+  source: string
+  matchSource: 'existing' | 'generated'
+}
+
+export interface NextPassageRecommendation {
+  target: { complexity: number; register: number }
+  recommended: RecommendedPassage | null
+  weakestDimension: string
+}

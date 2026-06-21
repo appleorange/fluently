@@ -1,6 +1,6 @@
 'use client'
 
-import { ErrorType, Recommendation } from '@/lib/types'
+import { ErrorType, Recommendation, HistoryPoint, NextPassageRecommendation } from '@/lib/types'
 
 export interface DiagnosticReportProps {
   report: string
@@ -9,8 +9,11 @@ export interface DiagnosticReportProps {
   reasoning: string
   selfCorrections: number
   selfCorrectionRate: number
+  history: HistoryPoint[]
+  nextPassage: NextPassageRecommendation | null
   onAdvance: () => void
   onRetry: () => void
+  onAcceptRecommendation: () => void
 }
 
 const ERROR_TYPE_CONFIG: Record<ErrorType, { label: string; badge: string }> = {
@@ -32,12 +35,78 @@ function ReportParagraph({ text, index }: { text: string; index: number }) {
   )
 }
 
-export default function DiagnosticReport({ report, errorType, recommendation, reasoning, selfCorrections, selfCorrectionRate, onAdvance, onRetry }: DiagnosticReportProps) {
+function TrendArrow({ delta }: { delta: number }) {
+  if (delta > 0) return <span className="text-green-600">↑</span>
+  if (delta < 0) return <span className="text-red-500">↓</span>
+  return <span className="text-slate-400">→</span>
+}
+
+function ReadingHistory({ history }: { history: HistoryPoint[] }) {
+  return (
+    <div className="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
+      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Reading history</h3>
+      <div className="flex gap-4 overflow-x-auto">
+        {history.map((point, i) => {
+          const prev = history[i - 1]
+          return (
+            <div key={i} className="shrink-0 text-center min-w-[72px]">
+              <p className="text-[11px] text-slate-400 mb-1">Session {i + 1}</p>
+              <p className="text-sm font-semibold text-slate-700">
+                {point.wcpm} <span className="text-[11px] text-slate-400">wcpm</span>
+                {prev && <TrendArrow delta={point.wcpm - prev.wcpm} />}
+              </p>
+              <p className="text-sm font-semibold text-slate-700">
+                {point.accuracy}% <span className="text-[11px] text-slate-400">acc</span>
+                {prev && <TrendArrow delta={point.accuracy - prev.accuracy} />}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function complexityLabel(c: number): string {
+  if (c < 0.3) return 'easier'
+  if (c < 0.6) return 'medium difficulty'
+  return 'harder'
+}
+
+function registerLabel(r: number): string {
+  if (r < 0.4) return 'casual'
+  if (r < 0.6) return 'professional-casual'
+  return 'formal'
+}
+
+function NextPassageCard({ nextPassage, onAccept }: { nextPassage: NextPassageRecommendation; onAccept: () => void }) {
+  const { target, recommended } = nextPassage
+  if (!recommended) return null
+  return (
+    <div className="mb-5 bg-blue-50 border border-blue-200 rounded-xl p-4">
+      <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Your next passage</h3>
+      <p className="text-sm font-semibold text-slate-800 mb-1">{recommended.title}</p>
+      <p className="text-xs text-slate-500 mb-3">
+        {complexityLabel(target.complexity)}, {registerLabel(target.register)} — targets your weakest area this session ({nextPassage.weakestDimension})
+      </p>
+      <button
+        onClick={onAccept}
+        className="text-sm font-medium text-blue-700 hover:text-blue-900 transition-colors"
+      >
+        Read this passage →
+      </button>
+    </div>
+  )
+}
+
+export default function DiagnosticReport({ report, errorType, recommendation, reasoning, selfCorrections, selfCorrectionRate, history, nextPassage, onAdvance, onRetry, onAcceptRecommendation }: DiagnosticReportProps) {
   const config = ERROR_TYPE_CONFIG[errorType]
   const paragraphs = report.split(/\n\n+/).filter(p => p.trim().length > 0)
   const isAdvance = recommendation === 'advance'
 
   return (
+    <>
+    {history.length > 1 && <ReadingHistory history={history} />}
     <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
       <div className="flex items-start justify-between mb-5">
         <div>
@@ -74,6 +143,8 @@ export default function DiagnosticReport({ report, errorType, recommendation, re
       </div>
 
       <div className="mt-6 pt-5 border-t border-slate-100">
+        {nextPassage && <NextPassageCard nextPassage={nextPassage} onAccept={onAcceptRecommendation} />}
+
         <p className="text-xs text-slate-400 mb-3">{reasoning}</p>
 
         {isAdvance ? (
@@ -109,6 +180,7 @@ export default function DiagnosticReport({ report, errorType, recommendation, re
         )}
       </div>
     </div>
+    </>
   )
 }
 
