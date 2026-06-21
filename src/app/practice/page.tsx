@@ -470,7 +470,7 @@ export default function PracticePage() {
             {/* Session complete header */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-slate-800">Session Complete 🎉</h2>
+                <h2 className="text-xl font-bold text-slate-800">Session Complete</h2>
                 <p className="text-slate-500 text-sm mt-1">Great job! Here&apos;s how you did.</p>
                 <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -479,7 +479,6 @@ export default function PracticePage() {
                   {formatTime(timerSeconds)} recorded
                 </p>
               </div>
-              <div className="text-5xl select-none" aria-hidden="true">🏆</div>
             </div>
 
             {passage && (
@@ -512,7 +511,7 @@ export default function PracticePage() {
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mt-6">
                 <h2 className="font-semibold text-slate-800 mb-1">Where this fits on the map</h2>
                 <p className="text-xs text-slate-400 mb-4">
-                  Orange is where you just read; blue is the recommended next position.
+                  Blue is where you just read; green ring is the recommended next position.
                 </p>
                 <PassageMap
                   key={passage.passageId}

@@ -16,7 +16,7 @@ const SIZE = 360
 const GRID_DOT_SIZE = 3 // matches the DotGrid dotSize prop below
 const SELECTED_DOT_R = GRID_DOT_SIZE // radius = grid dot's own diameter = twice its radius
 const DOT_ACTIVE_COLOR = '#3c1bc4'
-const SELECTED_DOT_COLOR = '#1e3a8a' // navy
+const SELECTED_DOT_COLOR = '#2563eb' // blue
 
 function toPoint(complexity: number, register: number) {
   return { x: complexity * SIZE, y: (1 - register) * SIZE }
@@ -102,12 +102,6 @@ export default function PassageMap({
           onPointerMove={isGenerating || readOnly ? undefined : handlePointerMove}
           onPointerUp={isGenerating || readOnly ? undefined : handlePointerUp}
         >
-          <defs>
-            <marker id="rec-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-              <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb" />
-            </marker>
-          </defs>
-
           {/* Y-axis — vertical line through center */}
           <line x1={SIZE / 2} y1={0} x2={SIZE / 2} y2={SIZE} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" style={{ pointerEvents: 'none' }} />
           <text x={SIZE / 2} y={14} fontSize={10} fill="#94a3b8" textAnchor="middle" style={{ pointerEvents: 'none', userSelect: 'none' }}>Formal</text>
@@ -122,14 +116,9 @@ export default function PassageMap({
               it's the same spot as the current pin — that's a valid "stay here" outcome); the
               arrow only draws when there's an actual meaningful distance to point across. */}
           {recommended && pos && showArrow && (
-            <>
-              <line
-                x1={pos.x} y1={pos.y} x2={recommended.x} y2={recommended.y}
-                stroke="#2563eb" strokeWidth={2} strokeDasharray="5 4"
-                markerEnd="url(#rec-arrowhead)" style={{ pointerEvents: 'none' }}
-              />
-              <circle cx={recommended.x} cy={recommended.y} r={5} fill="#2563eb" style={{ pointerEvents: 'none' }} />
-            </>
+            <circle cx={recommended.x} cy={recommended.y} r={SELECTED_DOT_R + 3}
+              fill="none" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="3 2"
+              style={{ pointerEvents: 'none' }} />
           )}
 
           {/* Selected position — a solid navy dot, twice the size of the background grid dots.
@@ -148,8 +137,8 @@ export default function PassageMap({
               selected dot instead of a coincident dot that would just be hidden underneath it */}
           {recommended && pos && !showArrow && (
             <circle
-              cx={pos.x} cy={pos.y} r={SELECTED_DOT_R + 4}
-              fill="none" stroke="#2563eb" strokeWidth={2} strokeDasharray="3 3"
+              cx={pos.x} cy={pos.y} r={SELECTED_DOT_R + 3}
+              fill="none" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="3 2"
               style={{ pointerEvents: 'none' }}
             />
           )}

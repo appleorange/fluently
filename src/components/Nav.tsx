@@ -7,8 +7,6 @@ const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/practice', label: 'Practice' },
   { href: '/progress', label: 'Progress' },
-  { href: '/reports', label: 'Reports' },
-  { href: '/resources', label: 'Resources' },
 ]
 
 function WaveformIcon() {
