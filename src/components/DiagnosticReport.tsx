@@ -89,7 +89,7 @@ function NextPassageCard({ nextPassage, onAccept }: { nextPassage: NextPassageRe
       <p className="text-xs text-slate-500 mb-3">
         {targetMoved
           ? `${complexityLabel(target.complexity)}, ${registerLabel(target.register)} — targets your weakest area this session (${weakestDimension})`
-          : `same difficulty as today — your growth area this session (${weakestDimension}) doesn't map to complexity or register, so the exercises above target it directly instead`}
+          : `same level, fresh text — consistency at this difficulty is the right move while you build ${weakestDimension === 'wcpmPercentile' ? 'reading speed' : 'phrasing accuracy'}`}
       </p>
       <button
         onClick={onAccept}

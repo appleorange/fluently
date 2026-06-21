@@ -281,7 +281,7 @@ export async function POST(request: Request) {
       nextPassageBlurb = `
 
 NEXT PASSAGE RECOMMENDATION:
-- This reader's weakest dimension this session: ${weakest}${targetMoved ? '' : ' (no PassageMap axis for this — stays at the same difficulty; address via the exercises above, not passage placement)'}
+- This reader's weakest dimension this session: ${weakest}${targetMoved ? '' : ' (retrying — same difficulty is intentional; more reps at this level, not escalation)'}
 - Optimal next passage target: ${complexityContext(target.complexity)}, ${registerContext(target.register)}${recommended ? `\n- Recommended passage: "${recommended.title}"` : ''}
 - Briefly reference this in your reasoning — why this next target follows from today's pattern.`
     }
